@@ -363,5 +363,12 @@ namespace AdvancedWorldGen
             ApplyOverrides(config);
             return config;
         }
+
+        /// <summary>读取某一项的原版默认值（不含该路径自身的覆盖）。</summary>
+        public static JValue DefaultValue(string path)
+        {
+            WorldGenConfiguration config = LoadBase();
+            return SelectToken(config, path) as JValue;
+        }
     }
 }
