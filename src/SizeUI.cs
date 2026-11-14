@@ -66,9 +66,9 @@ namespace AdvancedWorldGen
             enable.Top.Set(8f, 0f);
             area.Append(enable);
 
-            AddNumberRow(area, 58f, "宽度（格）", 4200, 12000,
+            AddNumberRow(area, 58f, "宽度（格）", 4200, 10000,
                 AwgConfig.Instance.CustomWidth, out _widthBox, ref _lastWidth);
-            AddNumberRow(area, 100f, "高度（格）", 1200, 3400,
+            AddNumberRow(area, 100f, "高度（格）", 1200, 3000,
                 AwgConfig.Instance.CustomHeight, out _heightBox, ref _lastHeight);
 
             UIText hint = new UIText(
@@ -111,8 +111,8 @@ namespace AdvancedWorldGen
             large.OnLeftClick += (evt, el) => ApplyPreset(8400, 2400);
             panel.Append(large);
 
-            TextButton huge = MakeButton("超大 10000x3000", 20f, by + 50f, 190f);
-            huge.OnLeftClick += (evt, el) => ApplyPreset(10000, 3000);
+            TextButton huge = MakeButton("超大 9000x2700", 20f, by + 50f, 190f);
+            huge.OnLeftClick += (evt, el) => ApplyPreset(9000, 2700);
             panel.Append(huge);
 
             TextButton max = MakeButton("极限 10000x3000", 20f + 190f + gap, by + 50f, 190f);
@@ -158,13 +158,13 @@ namespace AdvancedWorldGen
         {
             base.Update(gameTime);
 
-            ApplyNumber(_widthBox, ref _lastWidth, 4200, 12000, v =>
+            ApplyNumber(_widthBox, ref _lastWidth, 4200, 10000, v =>
             {
                 AwgConfig.Instance.CustomWidth = v;
                 AwgConfig.Instance.CustomSize = true;
             });
 
-            ApplyNumber(_heightBox, ref _lastHeight, 1200, 3400, v =>
+            ApplyNumber(_heightBox, ref _lastHeight, 1200, 3000, v =>
             {
                 AwgConfig.Instance.CustomHeight = v;
                 AwgConfig.Instance.CustomSize = true;
