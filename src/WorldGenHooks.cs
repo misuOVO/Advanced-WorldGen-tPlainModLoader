@@ -342,7 +342,7 @@ namespace AdvancedWorldGen
             }
 
             // 生成后回收一次，减少 32 位进程的碎片/峰值
-            TrimMemory("生成后");
+            TrimMemory("生成后", false);
         }
 
         private static void GenerateWorldPrefix()
@@ -435,7 +435,7 @@ namespace AdvancedWorldGen
                     Log.Write("AWG: 释放地图数据失败: " + e.Message);
                 }
 
-                TrimMemory("生成前");
+                TrimMemory("生成前", true);
             }
             catch (Exception e)
             {
@@ -443,16 +443,20 @@ namespace AdvancedWorldGen
             }
         }
 
-        /// <summary>完整 GC + 大对象堆压缩，尽量把地址空间还回去。</summary>
-        private static void TrimMemory(string tag)
+        /// <summary>完整 GC，需要时压缩大对象堆，尽量把地址空间还回去。</summary>
+        private static void TrimMemory(string tag, bool compactLoh)
         {
             try
             {
-                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                if (compactLoh)
+                    GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+
                 GC.Collect(2, GCCollectionMode.Forced, true);
                 GC.WaitForPendingFinalizers();
                 GC.Collect(2, GCCollectionMode.Forced, true);
-                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.Default;
+
+                if (compactLoh)
+                    GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.Default;
             }
             catch (Exception e)
             {
