@@ -154,6 +154,27 @@ namespace AdvancedWorldGen
                     Log.Write("AWG: 挂 checkMap 失败: " + e.Message);
                 }
 
+                // 原版世界生成配置：生成前把覆盖值写进去
+                try
+                {
+                    MethodInfo fromPath = typeof(Terraria.WorldBuilding.WorldGenConfiguration).GetMethod(
+                        "FromEmbeddedPath",
+                        BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+
+                    if (fromPath != null)
+                    {
+                        _harmony.Patch(fromPath, postfix: new HarmonyMethod(
+                            typeof(WorldGenHooks).GetMethod(nameof(FromEmbeddedPathPostfix),
+                                BindingFlags.NonPublic | BindingFlags.Static)));
+
+                        Log.Write("AWG: 已挂 WorldGenConfiguration.FromEmbeddedPath（原版配置覆盖）");
+                    }
+                }
+                catch (Exception e)
+                {
+                    Log.Write("AWG: 挂 FromEmbeddedPath 失败: " + e.Message);
+                }
+
                 // 读档后把各种写死尺寸的 section 网格补齐
                 try
                 {
@@ -187,6 +208,12 @@ namespace AdvancedWorldGen
         private static void ResetPrefix()
         {
             SeedOptions.Apply(AwgConfig.Instance);
+        }
+
+        private static void FromEmbeddedPathPostfix(ref Terraria.WorldBuilding.WorldGenConfiguration __result)
+        {
+            if (__result != null)
+                WorldgenConfig.ApplyOverrides(__result);
         }
 
         private static void CheckMapPostfix(int i, int j, bool __result)
@@ -227,8 +254,7 @@ namespace AdvancedWorldGen
             }
         }
 
-        private static void ClearWorldPrefix()
-        {
+        private static void ClearWorldPrefix()        {
             try
             {
                 int needX = Math.Max(8400, ((Main.maxTilesX + Main.sectionWidth - 1) / Main.sectionWidth) * Main.sectionWidth);

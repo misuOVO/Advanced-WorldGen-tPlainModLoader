@@ -30,7 +30,15 @@
 | 随机替换方块/墙 | 移植 `Random`，每种实心方块/墙映射成另一种随机类型 |
 | 随机上色 | 移植 `Random.Painted`，随机替换后再随机刷漆 |
 
-### 4. 自定义世界大小（突破原版 8400×2400）
+### 4. 原版世界生成配置（Worldgen Config）
+
+- 把原版 `WorldGenConfiguration` 里的全部参数（共 72 项）搬到界面上：群系概率、沙丘高度、金字塔概率、大理石/花岗岩数量、地牢离海滩距离、埋藏宝箱数量、微型群系数量/长度等；
+- 每项显示中文名 + 当前值，点击后在下方输入新值，支持「应用」和「恢复默认」；
+- 已修改的项前面有黄点标记，避免忘记改过什么；
+- 通过 Harmony 后置于 `WorldGenConfiguration.FromEmbeddedPath`，新建世界时自动把覆盖值写进原版配置（与原模组 `ProcessWorldGenConfig` 等价）；
+- 数值做了校验：整数/小数必须非负，`ScaleWith` 只接受 `None / WorldWidth / WorldArea`。
+
+### 5. 自定义世界大小（突破原版 8400×2400）
 
 - 面板里可直接**输入数字**或点预设（小/中/大/超大/极限）；
 - 最大支持 **10000 × 3000**（32 位进程 + LAA 下实测可用）；
@@ -43,7 +51,7 @@
 - 冷启动读档前（`WorldGen.clearWorld` prefix）也会先扩容，避免“退出重进能进、重启加载失败”；
 - 内存不足会自动缩小 / 回退，并写入日志。
 
-### 5. 32 位优化
+### 6. 32 位优化
 
 - 生成前按当前进程内存 + 新地图预估做预算检查，自动缩小尺寸；
 - 生成后执行一次 GC 并记录内存；
@@ -65,6 +73,7 @@ ico.png
 - 世界创建界面 → 种子栏右侧齿轮 → 「种子选项」；
 - 「秘密种子 ▸」进入秘密种子列表；
 - 「世界大小 ▸」设置自定义尺寸；
+- 「原版配置 ▸」修改原版世界生成参数；
 - 也可以在「模组设置 → 高级世界生成」里调整。
 
 配置保存在 `Mods\AdvancedWorldGen\config.json`。
@@ -82,9 +91,11 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 src/
   ThisMod.cs            入口
-  WorldGenHooks.cs      Harmony：Reset / GenerateWorld / setWorldSize / LoadWorld / clearWorld / checkMap
+  WorldGenHooks.cs      Harmony：Reset / GenerateWorld / setWorldSize / LoadWorld / clearWorld / checkMap / FromEmbeddedPath
   SeedOptions.cs        把配置写进 WorldGenerationOptions
   SeedCatalog.cs        官方选项 + 中文名/描述/备用图标
+  WorldgenConfig.cs     原版 WorldGenConfiguration 覆盖读写
+  WorldgenConfigUI.cs   原版世界生成配置编辑界面
   PostGen.cs            生成后处理：彩漆、海滩出生、随机替换
   WorldCreationUI.cs    世界创建界面面板（齿轮入口、种子输入、选项列表）
   SecretSeedsUI.cs      秘密种子页

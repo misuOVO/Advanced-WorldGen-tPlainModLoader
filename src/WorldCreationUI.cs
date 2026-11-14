@@ -461,14 +461,15 @@ namespace AdvancedWorldGen
             Append(panel);
 
             UIText title = new UIText("种子选项", 1.3f, true);
-            title.HAlign = 0.5f;
+            title.HAlign = 0f;
+            title.Left.Set(24f, 0f);
             title.Top.Set(12f, 0f);
             panel.Append(title);
 
             TextButton sizeButton = new TextButton("世界大小 ▸");
-            sizeButton.Left.Set(panelW - 330f, 0f);
+            sizeButton.Left.Set(panelW - 406f, 0f);
             sizeButton.Top.Set(18f, 0f);
-            sizeButton.Width.Set(150f, 0f);
+            sizeButton.Width.Set(124f, 0f);
             sizeButton.Height.Set(34f, 0f);
             sizeButton.OnLeftClick += (evt, el) =>
             {
@@ -484,9 +485,9 @@ namespace AdvancedWorldGen
             panel.Append(sizeButton);
 
             TextButton secretButton = new TextButton("秘密种子 ▸");
-            secretButton.Left.Set(panelW - 170f, 0f);
+            secretButton.Left.Set(panelW - 274f, 0f);
             secretButton.Top.Set(18f, 0f);
-            secretButton.Width.Set(150f, 0f);
+            secretButton.Width.Set(124f, 0f);
             secretButton.Height.Set(34f, 0f);
             secretButton.OnLeftClick += (evt, el) =>
             {
@@ -500,6 +501,24 @@ namespace AdvancedWorldGen
                 }
             };
             panel.Append(secretButton);
+
+            TextButton configButton = new TextButton("原版配置 ▸");
+            configButton.Left.Set(panelW - 142f, 0f);
+            configButton.Top.Set(18f, 0f);
+            configButton.Width.Set(124f, 0f);
+            configButton.Height.Set(34f, 0f);
+            configButton.OnLeftClick += (evt, el) =>
+            {
+                try
+                {
+                    Main.MenuUI.SetState(new WorldgenConfigState(_previous));
+                }
+                catch (Exception e)
+                {
+                    Log.Write("AWG: 打开原版配置失败: " + e.Message);
+                }
+            };
+            panel.Append(configButton);
 
             // 种子输入：直接写回世界创建界面的种子字段
             Box seedBg = new Box(new Color(10, 12, 22, 220), new Color(120, 140, 200, 140));

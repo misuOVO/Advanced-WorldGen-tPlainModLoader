@@ -27,6 +27,9 @@ namespace AdvancedWorldGen
         public int CustomWidth = 8400;
         public int CustomHeight = 2400;
 
+        // 原版世界生成配置覆盖：路径 -> 值字符串（如 Biomes.CaveHouseBiome.IceChestChance）
+        public Dictionary<string, string> WorldGenOverrides = new Dictionary<string, string>();
+
         // ---- 旧版本字段（仅用于迁移，不再显示） ----
         public bool Drunk;
         public bool NotTheBees;
@@ -92,6 +95,8 @@ namespace AdvancedWorldGen
 
                 Instance.MigrateLegacy();
                 Instance.Enabled = Instance.Enabled ?? new List<string>();
+                Instance.WorldGenOverrides = Instance.WorldGenOverrides
+                    ?? new Dictionary<string, string>();
 
                 if (!File.Exists(path))
                     Save();
