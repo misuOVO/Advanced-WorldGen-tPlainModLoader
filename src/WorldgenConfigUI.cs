@@ -105,7 +105,7 @@ namespace AdvancedWorldGen
             _onlyModifiedButton.Height.Set(30f, 0f);
             toolbar.Append(_onlyModifiedButton);
 
-            UIText tip = new UIText("右键单项 = 恢复该项默认值", 0.75f);
+            UIText tip = new UIText("点右侧数值直接改 · 右键单项恢复默认", 0.75f);
             tip.Left.Set(498f, 0f);
             tip.Top.Set(11f, 0f);
             tip.TextColor = new Color(180, 195, 225);
@@ -419,7 +419,8 @@ namespace AdvancedWorldGen
             _box.Text_MaxLength = 40;
             _box.BackgroundColor = new Color(226, 230, 240);
             _box.BorderColor = new Color(110, 130, 190);
-            _box.Left.Set(-204f, 0f);
+            _box.HAlign = 1f;
+            _box.Left.Set(-12f, 0f);
             _box.Top.Set(2f, 0f);
             _box.Width.Set(192f, 0f);
             _box.Height.Set(30f, 0f);
