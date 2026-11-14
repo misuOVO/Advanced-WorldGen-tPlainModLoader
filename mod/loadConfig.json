@@ -1,0 +1,7 @@
+{
+  "key": "Replica.AdvancedWorldGen",
+  "version": "1.0.0",
+  "isEnable": true,
+  "dllPath": "AdvancedWorldGen.dll",
+  "frontModKeys": null
+}
