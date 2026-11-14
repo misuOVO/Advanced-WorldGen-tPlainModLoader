@@ -139,11 +139,14 @@ namespace AdvancedWorldGen
             panel.Append(Switch("启用自定义大小",
                 () => M.CustomSize, v => M.CustomSize = v));
 
-            panel.Append(Slider("宽度（格）", 4200, 10000,
+            panel.Append(Slider("宽度（格）", 4200, 12000,
                 () => M.CustomWidth, v => M.CustomWidth = v));
 
-            panel.Append(Slider("高度（格）", 1200, 3000,
+            panel.Append(Slider("高度（格）", 1200, 3600,
                 () => M.CustomHeight, v => M.CustomHeight = v));
+
+            panel.Append(Switch("省内存生成（生成前释放旧世界/地图数据）",
+                () => M.MemorySaver, v => M.MemorySaver = v));
 
             panel.Append(new UIItemTitle(null, "也可以在创建世界界面点种子栏右侧的齿轮设置。"));
 

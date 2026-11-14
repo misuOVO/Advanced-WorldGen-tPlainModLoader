@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Runtime;
 using HarmonyLib;
 using Microsoft.Xna.Framework.Graphics;
 using Terraria;
@@ -18,6 +19,7 @@ namespace AdvancedWorldGen
     {
         private static Harmony _harmony;
         private static bool _applied;
+        private static bool _deferMap;
         private static readonly HashSet<long> MapCleared = new HashSet<long>();
 
         public static void Apply(tContentPatch.Patch.IAddPatch addPatch)
@@ -107,7 +109,7 @@ namespace AdvancedWorldGen
 
                 // 启动时就把地图网格扩到本模组允许的最大尺寸，
                 // 这样读档/超大世界都不会在 MapRenderer.checkMap 越界
-                ResizeMapRenderer(10000, 3000);
+                ResizeMapRenderer(12000, 3600);
 
                 // 读档时 LoadHeader 会先设 maxTiles 再调用 WorldGen.clearWorld()，
                 // 此时 Main.tile 还停留在 8400x2400，必须在这之前扩容，否则读档失败
@@ -265,12 +267,14 @@ namespace AdvancedWorldGen
                     || Main.tile.GetLength(0) < needX
                     || Main.tile.GetLength(1) < needY)
                 {
-                    Main.tile = new Tile[needX, needY];
-                    Log.Write("AWG: 读取前分配 Tile 数组 " + needX + " x " + needY);
+                    // 复用旧数组里的 Tile 对象，避免读大世界时多分配几百万个对象
+                    AllocateTileArray(needX, needY);
                 }
 
                 ResizeActiveSections();
-                EnsureMapSize(needX, needY);
+
+                if (!_deferMap)
+                    EnsureMapSize(needX, needY);
             }
             catch (Exception e)
             {
@@ -288,6 +292,7 @@ namespace AdvancedWorldGen
                 int allocY = Math.Max(2400, ((Main.maxTilesY + 149) / 150) * 150);
                 ResizeMapRenderer(allocX, allocY);
                 EnsureMapSize(allocX, allocY);
+                _deferMap = false;
             }
             catch (Exception e)
             {
@@ -318,19 +323,26 @@ namespace AdvancedWorldGen
         {
             PostGen.Apply();
 
-            // 生成后回收一次，减少 32 位进程的碎片/峰值
-            try
+            // 省内存模式：生成结束后把地图数据按最终尺寸补回来
+            if (_deferMap)
             {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                GC.Collect();
+                _deferMap = false;
 
-                long mb = Process.GetCurrentProcess().PrivateMemorySize64 / 1024 / 1024;
-                Log.Write("AWG: 生成后 GC 完成，进程内存约 " + mb + " MB（LAA=" + IsLargeAddressAware() + "）");
+                try
+                {
+                    int allocX = Math.Max(8400, ((Main.maxTilesX + 199) / 200) * 200);
+                    int allocY = Math.Max(2400, ((Main.maxTilesY + 149) / 150) * 150);
+                    EnsureMapSize(allocX, allocY);
+                    Log.Write("AWG: 省内存模式：已恢复地图数据");
+                }
+                catch (Exception e)
+                {
+                    Log.Write("AWG: 恢复地图数据失败: " + e.Message);
+                }
             }
-            catch
-            {
-            }
+
+            // 生成后回收一次，减少 32 位进程的碎片/峰值
+            TrimMemory("生成后");
         }
 
         private static void GenerateWorldPrefix()
@@ -341,17 +353,33 @@ namespace AdvancedWorldGen
                 if (!cfg.CustomSize)
                     return;
 
-                int width = Math.Min(10000, Math.Max(4200, cfg.CustomWidth));
-                int height = Math.Min(3000, Math.Max(1200, cfg.CustomHeight));
+                int width = Math.Min(12000, Math.Max(4200, cfg.CustomWidth));
+                int height = Math.Min(3600, Math.Max(1200, cfg.CustomHeight));
 
-                ApplyMemoryBudget(ref width, ref height);
+                // 上一次生成如果中途失败，地图数据可能还停在 1x1，先补回来
+                if (_deferMap)
+                {
+                    _deferMap = false;
+                    EnsureMapSize(
+                        Math.Max(8400, ((Main.maxTilesX + 199) / 200) * 200),
+                        Math.Max(2400, ((Main.maxTilesY + 149) / 150) * 150));
+                }
+
+                // 省内存模式：生成开始前先把地图数据和上一局残留放掉，
+                // 这样后面估算预算时用的是真实可用内存。
+                if (cfg.MemorySaver)
+                    ReleaseBeforeGeneration();
+
+                ApplyMemoryBudget(ref width, ref height, cfg.MemorySaver);
 
                 Main.maxTilesX = width;
                 Main.maxTilesY = height;
 
                 ResizeActiveSections();
 
-                if (width > 8400 || height > 2400)
+                bool big = width > 8400 || height > 2400;
+
+                if (big || Main.tile == null)
                     ReallocateTilemap(width, height);
 
                 try
@@ -364,7 +392,9 @@ namespace AdvancedWorldGen
                 }
 
                 Log.Write("AWG: 自定义世界大小 " + width + " x " + height
-                    + (width > 8400 || height > 2400 ? "（已扩展数组）" : ""));
+                    + (big ? "（已扩展数组）" : "")
+                    + "，当前内存 " + MemMb() + " MB"
+                    + (cfg.MemorySaver ? "，省内存模式" : ""));
             }
             catch (Exception e)
             {
@@ -372,16 +402,80 @@ namespace AdvancedWorldGen
             }
         }
 
-        /// <summary>
-        /// 根据当前进程已用内存 + 新地图预估内存，自动缩小世界尺寸，避免 32 位 OOM。
-        /// 开启了 Large Address Aware 的进程预算更高。
-        /// </summary>
-        private static void ApplyMemoryBudget(ref int width, ref int height)
+        private static long MemMb()
         {
             try
             {
+                return Process.GetCurrentProcess().PrivateMemorySize64 / 1024 / 1024;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// 省内存模式：丢掉地图存档数据（生成期间不用），并做一次带 LOH 压缩的完整回收。
+        /// 旧世界的 Tile 对象故意保留，ReallocateTilemap 会把它们搬到新数组里复用。
+        /// </summary>
+        private static void ReleaseBeforeGeneration()
+        {
+            try
+            {
+                Log.Write("AWG: 省内存模式启动，当前内存 " + MemMb() + " MB");
+
+                try
+                {
+                    Main.Map = new Terraria.Map.WorldMap(1, 1);
+                    _deferMap = true;
+                    Log.Write("AWG: 已暂时释放地图数据");
+                }
+                catch (Exception e)
+                {
+                    Log.Write("AWG: 释放地图数据失败: " + e.Message);
+                }
+
+                TrimMemory("生成前");
+            }
+            catch (Exception e)
+            {
+                Log.Write("AWG: 省内存处理失败: " + e.Message);
+            }
+        }
+
+        /// <summary>完整 GC + 大对象堆压缩，尽量把地址空间还回去。</summary>
+        private static void TrimMemory(string tag)
+        {
+            try
+            {
+                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                GC.Collect(2, GCCollectionMode.Forced, true);
+                GC.WaitForPendingFinalizers();
+                GC.Collect(2, GCCollectionMode.Forced, true);
+                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.Default;
+            }
+            catch (Exception e)
+            {
+                Log.Write("AWG: 内存回收失败: " + e.Message);
+            }
+
+            Log.Write("AWG: [" + tag + "] 进程内存约 " + MemMb()
+                + " MB（LAA=" + IsLargeAddressAware() + "）");
+        }
+
+        /// <summary>
+        /// 根据当前进程已用内存 + 新地图预估内存，自动缩小世界尺寸，避免 32 位 OOM。
+        /// 省内存模式下旧方块会被复用，只算新增部分。
+        /// </summary>
+        private static void ApplyMemoryBudget(ref int width, ref int height, bool memorySaver)
+        {
+            try
+            {
+                if (width <= 8400 && height <= 2400)
+                    return;
+
                 bool laa = IsLargeAddressAware();
-                long budget = laa ? 3_000_000_000L : 1_400_000_000L;
+                long budget = laa ? 3_400_000_000L : 1_500_000_000L;
 
                 long current = 0;
                 try
@@ -392,17 +486,46 @@ namespace AdvancedWorldGen
                 {
                 }
 
-                for (int attempt = 0; attempt < 12; attempt++)
+                long oldTiles = 0;
+                bool oldPopulated = false;
+
+                if (Main.tile != null)
+                {
+                    oldTiles = (long)Main.tile.GetLength(0) * Main.tile.GetLength(1);
+
+                    try
+                    {
+                        oldPopulated = Main.tile[0, 0] != null;
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                for (int attempt = 0; attempt < 10; attempt++)
                 {
                     long allocX = ((width + 199) / 200) * 200L;
                     long allocY = ((height + 149) / 150) * 150L;
-                    long estimate = allocX * allocY * 32L;   // 每个 Tile 约 32 字节
+                    long allocTiles = allocX * allocY;
+
+                    long estimate;
+                    if (memorySaver)
+                    {
+                        // 数组 + 地图，每个 4 字节；只有真正复用到的旧格子才省掉对象分配
+                        long reusable = oldPopulated ? Math.Min(allocTiles, oldTiles) : 0L;
+                        long extraTiles = Math.Max(0L, allocTiles - reusable);
+                        estimate = allocTiles * 8L + extraTiles * 28L;
+                    }
+                    else
+                    {
+                        estimate = allocTiles * 60L;
+                    }
 
                     if (current + estimate <= budget)
                         return;
 
-                    int newWidth = Math.Max(4200, (int)(width * 0.9));
-                    int newHeight = Math.Max(1200, (int)(height * 0.9));
+                    int newWidth = Math.Max(8400, (int)(width * 0.92));
+                    int newHeight = Math.Max(2400, (int)(height * 0.92));
 
                     if (newWidth == width && newHeight == height)
                         break;
@@ -416,12 +539,11 @@ namespace AdvancedWorldGen
                         + (budget / 1024 / 1024) + " MB, LAA=" + laa + "）");
                 }
 
-                // 实在装不下就退回中世界
-                if (width > 6400 || height > 1800)
+                if (width > 8400 || height > 2400)
                 {
-                    width = 6400;
-                    height = 1800;
-                    Log.Write("AWG: 内存预算严重不足，回退到 6400 x 1800");
+                    width = Math.Max(8400, width);
+                    height = Math.Max(2400, height);
+                    Log.Write("AWG: 内存预算不足，最终限制在 " + width + " x " + height);
                 }
             }
             catch (Exception e)
@@ -431,7 +553,7 @@ namespace AdvancedWorldGen
         }
 
         /// <summary>读取自身 PE 头，判断是否已开启 Large Address Aware。</summary>
-        private static bool IsLargeAddressAware()
+        internal static bool IsLargeAddressAware()
         {
             try
             {
@@ -696,12 +818,13 @@ namespace AdvancedWorldGen
 
             try
             {
-                Main.tile = new Tile[allocX, allocY];
-                Log.Write("AWG: 重新分配 Tile 数组 " + allocX + " x " + allocY);
+                AllocateTileArray(allocX, allocY);
 
                 ResizeMapRenderer(allocX, allocY);
 
-                EnsureMapSize(allocX, allocY);
+                // 省内存模式下地图数据推后到生成结束再分配
+                if (!_deferMap)
+                    EnsureMapSize(allocX, allocY);
             }
             catch (OutOfMemoryException)
             {
@@ -710,6 +833,51 @@ namespace AdvancedWorldGen
                 Main.tile = new Tile[8400, 2400];
                 Log.Write("AWG: 内存不足，回退到 8400 x 2400");
             }
+        }
+
+        /// <summary>
+        /// 分配新的 Tile 数组，并把旧数组里已有的 Tile 对象搬过来复用。
+        /// clearWorld 会对非空格子调用 ClearEverything()，所以复用是安全的；
+        /// 这样扩容时能少分配几百万到上千万个对象（约每格 24 字节）。
+        /// </summary>
+        private static void AllocateTileArray(int allocX, int allocY)
+        {
+            Tile[,] old = Main.tile;
+            int oldW = 0;
+            int oldH = 0;
+
+            if (old != null)
+            {
+                oldW = old.GetLength(0);
+                oldH = old.GetLength(1);
+            }
+
+            Tile[,] fresh = new Tile[allocX, allocY];
+            int reused = 0;
+
+            if (old != null && oldW > 0 && oldH > 0)
+            {
+                int copyW = Math.Min(oldW, allocX);
+                int copyH = Math.Min(oldH, allocY);
+
+                for (int x = 0; x < copyW; x++)
+                {
+                    for (int y = 0; y < copyH; y++)
+                    {
+                        Tile tile = old[x, y];
+                        if (tile != null)
+                        {
+                            fresh[x, y] = tile;
+                            reused++;
+                        }
+                    }
+                }
+            }
+
+            Main.tile = fresh;
+
+            Log.Write("AWG: 分配 Tile 数组 " + allocX + " x " + allocY
+                + "（复用旧方块 " + reused + " 个，当前内存 " + MemMb() + " MB）");
         }
     }
 }

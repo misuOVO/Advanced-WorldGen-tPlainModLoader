@@ -27,6 +27,9 @@ namespace AdvancedWorldGen
         public int CustomWidth = 8400;
         public int CustomHeight = 2400;
 
+        // 省内存生成：生成前释放旧世界方块 / 地图数据，生成后再恢复
+        public bool MemorySaver;
+
         // 原版世界生成配置覆盖：路径 -> 值字符串（如 Biomes.CaveHouseBiome.IceChestChance）
         public Dictionary<string, string> WorldGenOverrides = new Dictionary<string, string>();
 
