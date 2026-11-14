@@ -254,7 +254,8 @@ namespace AdvancedWorldGen
             }
         }
 
-        private static void ClearWorldPrefix()        {
+        private static void ClearWorldPrefix()
+        {
             try
             {
                 int needX = Math.Max(8400, ((Main.maxTilesX + Main.sectionWidth - 1) / Main.sectionWidth) * Main.sectionWidth);
@@ -277,7 +278,8 @@ namespace AdvancedWorldGen
             }
         }
 
-        private static void LoadWorldPostfix()        {
+        private static void LoadWorldPostfix()
+        {
             ResizeActiveSections();
 
             try
@@ -293,7 +295,8 @@ namespace AdvancedWorldGen
             }
         }
 
-        private static void SetWorldSizePostfix()        {
+        private static void SetWorldSizePostfix()
+        {
             try
             {
                 if (Main.maxTilesX <= 8400 && Main.maxTilesY <= 2400)
