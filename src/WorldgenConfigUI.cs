@@ -105,8 +105,9 @@ namespace AdvancedWorldGen
             _onlyModifiedButton.Height.Set(30f, 0f);
             toolbar.Append(_onlyModifiedButton);
 
-            UIText tip = new UIText("点右侧数值直接改 · 右键单项恢复默认", 0.75f);
-            tip.Left.Set(498f, 0f);
+            UIText tip = new UIText("点数值直接改 · 右键恢复默认", 0.75f);
+            tip.HAlign = 1f;
+            tip.Left.Set(-12f, 0f);
             tip.Top.Set(11f, 0f);
             tip.TextColor = new Color(180, 195, 225);
             toolbar.Append(tip);
@@ -184,7 +185,7 @@ namespace AdvancedWorldGen
                         entry.Group == "Passes" ? "生成步骤参数（Passes）" : "群系参数（Biomes）"));
                 }
 
-                ConfigRow row = new ConfigRow(entry, Apply, ResetOne);
+                ConfigRow row = new ConfigRow(entry, Apply, ApplyChoice, ResetOne);
                 row.Width.Set(-8f, 1f);
                 row.Height.Set(34f, 0f);
                 row.Left.Set(2f, 0f);
@@ -230,6 +231,24 @@ namespace AdvancedWorldGen
 
         private bool Apply(ConfigRow row, WorldgenConfig.Entry entry, string text)
         {
+            if (!ApplyValue(entry, text))
+                return false;
+
+            SetStatus("已保存：" + entry.Label + " = " + text);
+            return true;
+        }
+
+        private bool ApplyChoice(WorldgenConfig.Entry entry, string text)
+        {
+            if (!ApplyValue(entry, text))
+                return false;
+
+            SetStatus("已保存：" + entry.Label + " = " + WorldgenConfig.DescribeChoice(text));
+            return true;
+        }
+
+        private bool ApplyValue(WorldgenConfig.Entry entry, string text)
+        {
             if (!WorldgenConfig.SetValue(entry, text, out string error))
             {
                 SetStatus("无效值：" + error);
@@ -252,9 +271,7 @@ namespace AdvancedWorldGen
             {
             }
 
-            SetStatus("已保存：" + entry.Label + " = " + text);
             UpdateHeader();
-
             return true;
         }
 
@@ -389,8 +406,10 @@ namespace AdvancedWorldGen
 
         private readonly WorldgenConfig.Entry _entry;
         private readonly Func<ConfigRow, WorldgenConfig.Entry, string, bool> _apply;
+        private readonly Func<WorldgenConfig.Entry, string, bool> _applyChoice;
         private readonly Action<WorldgenConfig.Entry> _reset;
         private readonly UITextBox _box;
+        private readonly ChoiceButton _choice;
 
         private string _applied;
         private string _lastSeen;
@@ -406,27 +425,38 @@ namespace AdvancedWorldGen
 
         public ConfigRow(WorldgenConfig.Entry entry,
             Func<ConfigRow, WorldgenConfig.Entry, string, bool> apply,
+            Func<WorldgenConfig.Entry, string, bool> applyChoice,
             Action<WorldgenConfig.Entry> reset)
         {
             _entry = entry;
             _apply = apply;
+            _applyChoice = applyChoice;
             _reset = reset;
 
             _applied = WorldgenConfig.Format(entry.Value);
             _lastSeen = _applied;
 
-            _box = new UITextBox("");
-            _box.Text_MaxLength = 40;
-            _box.BackgroundColor = new Color(226, 230, 240);
-            _box.BorderColor = new Color(110, 130, 190);
-            _box.HAlign = 1f;
-            _box.Left.Set(-12f, 0f);
-            _box.Top.Set(2f, 0f);
-            _box.Width.Set(192f, 0f);
-            _box.Height.Set(30f, 0f);
-            _box.SetText(_applied);
-            _box.OnLostFocus = Commit;
-            Append(_box);
+            // 英文枚举（ScaleWith）改成点击切换的选项，不用手打
+            if (WorldgenConfig.IsChoiceEntry(entry))
+            {
+                _choice = new ChoiceButton(entry, _applyChoice);
+                Append(_choice);
+            }
+            else
+            {
+                _box = new UITextBox("");
+                _box.Text_MaxLength = 40;
+                _box.BackgroundColor = new Color(226, 230, 240);
+                _box.BorderColor = new Color(110, 130, 190);
+                _box.HAlign = 1f;
+                _box.Left.Set(-12f, 0f);
+                _box.Top.Set(2f, 0f);
+                _box.Width.Set(192f, 0f);
+                _box.Height.Set(30f, 0f);
+                _box.SetText(_applied);
+                _box.OnLostFocus = Commit;
+                Append(_box);
+            }
 
             OnRightClick += (evt, el) => _reset?.Invoke(_entry);
         }
@@ -435,13 +465,23 @@ namespace AdvancedWorldGen
         {
             _applied = WorldgenConfig.Format(_entry.Value);
             _lastSeen = _applied;
-            _box.SetText(_applied);
-            _box.BorderColor = new Color(110, 130, 190);
+
+            if (_choice != null)
+            {
+                _choice.SyncFromEntry();
+                return;
+            }
+
+            if (_box != null)
+            {
+                _box.SetText(_applied);
+                _box.BorderColor = new Color(110, 130, 190);
+            }
         }
 
         public void Commit()
         {
-            if (_committing)
+            if (_committing || _box == null)
                 return;
 
             string text = _box.Text ?? "";
@@ -485,6 +525,9 @@ namespace AdvancedWorldGen
         public override void Update(GameTime gameTime)
         {
             base.Update(gameTime);
+
+            if (_box == null)
+                return;
 
             string text = _box.Text ?? "";
 
@@ -543,6 +586,76 @@ namespace AdvancedWorldGen
     // ------------------------------------------------------------------
     // 小控件
     // ------------------------------------------------------------------
+
+    /// <summary>点击循环切换的选项按钮（用于 ScaleWith 这类英文枚举）。</summary>
+    internal class ChoiceButton : UIElement
+    {
+        private static readonly string[] Values = { "None", "WorldWidth", "WorldArea" };
+        private static readonly string[] Labels = { "不缩放", "按世界宽度", "按世界面积" };
+
+        private readonly WorldgenConfig.Entry _entry;
+        private readonly Func<WorldgenConfig.Entry, string, bool> _apply;
+        private int _index;
+
+        public ChoiceButton(WorldgenConfig.Entry entry, Func<WorldgenConfig.Entry, string, bool> apply)
+        {
+            _entry = entry;
+            _apply = apply;
+
+            HAlign = 1f;
+            Left.Set(-12f, 0f);
+            Top.Set(2f, 0f);
+            Width.Set(192f, 0f);
+            Height.Set(30f, 0f);
+
+            SyncFromEntry();
+
+            OnLeftClick += (evt, el) => Step(1);
+        }
+
+        public void SyncFromEntry()
+        {
+            string value = WorldgenConfig.Format(_entry.Value);
+            _index = Array.IndexOf(Values, value);
+
+            if (_index < 0)
+                _index = 0;
+        }
+
+        private void Step(int dir)
+        {
+            int next = (_index + dir + Values.Length) % Values.Length;
+
+            if (_apply(_entry, Values[next]))
+                _index = next;
+        }
+
+        protected override void DrawSelf(SpriteBatch spriteBatch)
+        {
+            CalculatedStyle d = GetDimensions();
+            Rectangle rect = new Rectangle((int)d.X, (int)d.Y, (int)d.Width, (int)d.Height);
+
+            Color bg = IsMouseHovering
+                ? new Color(74, 100, 168, 235)
+                : new Color(52, 68, 116, 215);
+
+            UiPaint.Fill(spriteBatch, rect, bg);
+            UiPaint.Outline(spriteBatch, rect,
+                IsMouseHovering ? new Color(180, 205, 255) : new Color(120, 145, 205));
+
+            UiPaint.Text(spriteBatch, "<",
+                new Vector2(rect.X + 8f, rect.Y + 5f), new Color(200, 215, 245), 0.85f);
+
+            UiPaint.Text(spriteBatch, ">",
+                new Vector2(rect.Right - 18f, rect.Y + 5f), new Color(200, 215, 245), 0.85f);
+
+            string label = _index >= 0 && _index < Labels.Length
+                ? Labels[_index]
+                : WorldgenConfig.Format(_entry.Value);
+
+            UiPaint.CenteredText(spriteBatch, label, rect, Color.White, 0.86f);
+        }
+    }
 
     internal class FilterButton : UIElement
     {

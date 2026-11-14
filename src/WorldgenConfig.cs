@@ -364,6 +364,27 @@ namespace AdvancedWorldGen
             return config;
         }
 
+        /// <summary>这一项是不是点击切换的枚举选项（目前只有缩放方式）。</summary>
+        public static bool IsChoiceEntry(Entry entry)
+        {
+            return entry != null
+                && entry.Path.EndsWith(".ScaleWith", StringComparison.Ordinal);
+        }
+
+        public static string DescribeChoice(string value)
+        {
+            if (value == "WorldWidth")
+                return "按世界宽度";
+
+            if (value == "WorldArea")
+                return "按世界面积";
+
+            if (value == "None")
+                return "不缩放";
+
+            return value;
+        }
+
         /// <summary>读取某一项的原版默认值（不含该路径自身的覆盖）。</summary>
         public static JValue DefaultValue(string path)
         {
