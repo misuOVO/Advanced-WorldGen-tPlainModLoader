@@ -147,6 +147,9 @@ namespace AdvancedWorldGen
 
             panel.Append(new UIItemTitle(null, "也可以在创建世界界面点种子栏右侧的齿轮设置。"));
 
+            panel.Append(new UIItemTitle(null,
+                "原版配置修改：世界创建界面 → 齿轮 → 原版配置 ▸（宝箱概率、沙丘高度、地牢位置等）"));
+
             root.AddChild(panel);
             return root;
         }
