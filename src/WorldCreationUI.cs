@@ -87,7 +87,7 @@ namespace AdvancedWorldGen
 
                 if (gear != null && gear.Parent != null)
                 {
-                    GearOverlayButton overlay = new GearOverlayButton(__instance);
+                    GearOverlayButton overlay = new GearOverlayButton(__instance, gear);
 
                     overlay.Left = gear.Left;
                     overlay.Top = gear.Top;
@@ -418,10 +418,12 @@ namespace AdvancedWorldGen
     internal class GearOverlayButton : UIElement
     {
         private readonly UIWorldCreation _menu;
+        private readonly UIElement _target;
 
-        public GearOverlayButton(UIWorldCreation menu)
+        public GearOverlayButton(UIWorldCreation menu, UIElement target)
         {
             _menu = menu;
+            _target = target;
 
             OnLeftClick += (evt, el) =>
             {
@@ -441,6 +443,43 @@ namespace AdvancedWorldGen
                 if (Main.hoverItemName == "种子选项")
                     Main.hoverItemName = "";
             };
+        }
+
+        // 1.4.5.8 的原版齿轮是靠 SnapPoint 定位的，直接抄 Left/Top 会落到错误位置。
+        // 每帧按齿轮的实际屏幕位置同步，保证图标和点击区域都在齿轮上。
+        public override void Update(GameTime gameTime)
+        {
+            base.Update(gameTime);
+
+            if (_target == null || Parent == null)
+                return;
+
+            try
+            {
+                CalculatedStyle t = _target.GetDimensions();
+                CalculatedStyle p = Parent.GetInnerDimensions();
+
+                float x = t.X - p.X;
+                float y = t.Y - p.Y;
+
+                if (Math.Abs(Left.Pixels - x) > 0.1f)
+                    Left.Set(x, 0f);
+
+                if (Math.Abs(Top.Pixels - y) > 0.1f)
+                    Top.Set(y, 0f);
+
+                if (Math.Abs(Width.Pixels - t.Width) > 0.1f)
+                    Width.Set(t.Width, 0f);
+
+                if (Math.Abs(Height.Pixels - t.Height) > 0.1f)
+                    Height.Set(t.Height, 0f);
+
+                HAlign = 0f;
+                VAlign = 0f;
+            }
+            catch
+            {
+            }
         }
 
         protected override void DrawSelf(SpriteBatch spriteBatch)
