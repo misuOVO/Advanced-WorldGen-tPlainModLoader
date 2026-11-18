@@ -78,13 +78,10 @@ namespace AdvancedWorldGen
 
             _searchBox = new UITextBox("搜索名称或路径…");
             _searchBox.Text_MaxLength = 40;
-            _searchBox.SetTextScale(0.82f);
-            _searchBox.BackgroundColor = new Color(226, 230, 240);
-            _searchBox.BorderColor = new Color(120, 140, 200);
             _searchBox.Left.Set(10f, 0f);
-            _searchBox.Top.Set(5f, 0f);
+            _searchBox.Top.Set(4f, 0f);
             _searchBox.Width.Set(330f, 0f);
-            _searchBox.Height.Set(30f, 0f);
+            _searchBox.Height.Set(32f, 0f);
             _searchBox.OnTextChanged = text =>
             {
                 _search = text ?? "";
@@ -446,13 +443,11 @@ namespace AdvancedWorldGen
             {
                 _box = new UITextBox("");
                 _box.Text_MaxLength = 40;
-                _box.BackgroundColor = new Color(226, 230, 240);
-                _box.BorderColor = new Color(110, 130, 190);
                 _box.HAlign = 1f;
                 _box.Left.Set(-12f, 0f);
-                _box.Top.Set(2f, 0f);
+                _box.Top.Set(1f, 0f);
                 _box.Width.Set(192f, 0f);
-                _box.Height.Set(30f, 0f);
+                _box.Height.Set(32f, 0f);
                 _box.SetText(_applied);
                 _box.OnLostFocus = Commit;
                 Append(_box);
@@ -475,7 +470,7 @@ namespace AdvancedWorldGen
             if (_box != null)
             {
                 _box.SetText(_applied);
-                _box.BorderColor = new Color(110, 130, 190);
+                TextBoxCompat.Normal(_box);
             }
         }
 
@@ -488,7 +483,7 @@ namespace AdvancedWorldGen
 
             if (text == _applied)
             {
-                _box.BorderColor = new Color(110, 130, 190);
+                TextBoxCompat.Normal(_box);
                 return;
             }
 
@@ -513,12 +508,12 @@ namespace AdvancedWorldGen
             {
                 _applied = text;
                 _failedText = null;
-                _box.BorderColor = new Color(110, 190, 130);
+                TextBoxCompat.Saved(_box);
             }
             else
             {
                 _failedText = text;
-                _box.BorderColor = new Color(220, 96, 96);
+                TextBoxCompat.Error(_box);
             }
         }
 

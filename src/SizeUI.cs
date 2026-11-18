@@ -141,13 +141,11 @@ namespace AdvancedWorldGen
 
             box = new tContentPatch.Content.UI.UITextBox(value.ToString());
             box.Text_MaxLength = 5;
-            box.SetTextScale(0.9f);
-            box.BackgroundColor = new Color(10, 12, 22) * 0.95f;
-            box.BorderColor = new Color(120, 140, 200);
             box.Left.Set(200f, 0f);
             box.Top.Set(top, 0f);
             box.Width.Set(150f, 0f);
             box.Height.Set(34f, 0f);
+            box.SetText(value.ToString());
             area.Append(box);
 
             string capturedLast = box.Text;

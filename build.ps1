@@ -7,7 +7,7 @@ $root    = Split-Path -Parent $MyInvocation.MyCommand.Path
 $srcDir  = Join-Path $root 'src'
 $modTpl  = Join-Path $root 'mod'
 $outDir  = Join-Path $root 'dist'
-$gameDir = 'D:\steam\steamapps\common\Terraria'
+$gameDir = 'E:\SteamLibrary\steamapps\common\Terraria'
 $modsDir = Join-Path $gameDir 'Mods\AdvancedWorldGen'
 $modName = 'AdvancedWorldGen'
 
@@ -24,6 +24,37 @@ if (-not $csc) { throw 'Roslyn csc.dll not found. Please install the .NET SDK.' 
 $fw  = 'C:\Windows\Microsoft.NET\Framework\v4.0.30319'
 $xna = 'C:\Windows\Microsoft.NET\assembly\GAC_32'
 
+# Terraria 1.4.5.8 embeds ReLogic inside Terraria.exe
+# (Terraria.Libraries.ReLogic.ReLogic.dll). If ReLogic.dll is not on disk,
+# extract it from the exe resources and use that copy as a reference.
+$reLogic = Join-Path $gameDir 'ReLogic.dll'
+if (-not (Test-Path $reLogic)) {
+    $refDir = Join-Path $outDir 'refs'
+    New-Item -ItemType Directory -Force -Path $refDir | Out-Null
+    $reLogic = Join-Path $refDir 'ReLogic.dll'
+
+    if (-not (Test-Path $reLogic)) {
+        Write-Host 'Extracting embedded ReLogic.dll from Terraria.exe ...'
+        $exe = Join-Path $gameDir 'Terraria.exe'
+        $ps32 = Join-Path $env:WINDIR 'SysWOW64\WindowsPowerShell\v1.0\powershell.exe'
+        $extract = Join-Path $env:TEMP 'awg_extract_relogic.ps1'
+
+        $lines = @(
+            "`$asm = [Reflection.Assembly]::LoadFrom('$exe')",
+            "`$s = `$asm.GetManifestResourceStream('Terraria.Libraries.ReLogic.ReLogic.dll')",
+            "if (`$s -eq `$null) { throw 'resource not found' }",
+            "`$f = [System.IO.File]::Create('$reLogic')",
+            "`$s.CopyTo(`$f)",
+            "`$f.Close()",
+            "`$s.Close()"
+        )
+
+        Set-Content -Path $extract -Value $lines -Encoding ASCII
+        & $ps32 -NoProfile -ExecutionPolicy Bypass -File $extract
+        if (-not (Test-Path $reLogic)) { throw 'Failed to extract ReLogic.dll' }
+    }
+}
+
 $refs = @(
     (Join-Path $fw 'mscorlib.dll'),
     (Join-Path $fw 'System.dll'),
@@ -34,7 +65,7 @@ $refs = @(
     (Join-Path $gameDir 'tContentPatch.dll'),
     (Join-Path $gameDir 'CommandHelp.dll'),
     (Join-Path $gameDir '0Harmony.dll'),
-    (Join-Path $gameDir 'ReLogic.dll'),
+    $reLogic,
     (Join-Path $gameDir 'Newtonsoft.Json.dll'),
     (Join-Path $xna 'Microsoft.Xna.Framework\v4.0_4.0.0.0__842cf8be1de50553\Microsoft.Xna.Framework.dll'),
     (Join-Path $xna 'Microsoft.Xna.Framework.Game\v4.0_4.0.0.0__842cf8be1de50553\Microsoft.Xna.Framework.Game.dll'),

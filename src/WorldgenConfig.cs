@@ -317,7 +317,25 @@ namespace AdvancedWorldGen
                     ? RootOf(config, "_passRoot")
                     : null;
 
-            return jObject != null ? jObject.SelectToken(rest) : null;
+            if (jObject == null)
+                return null;
+
+            // 不能用 SelectToken：配置里大量路径带空格（Buried Chests / Micro Biomes），
+            // JSONPath 解析会直接报 "Unexpected character while parsing path"。
+            JToken token = jObject;
+
+            foreach (string segment in rest.Split('.'))
+            {
+                JObject current = token as JObject;
+                if (current == null)
+                    return null;
+
+                token = current[segment];
+                if (token == null)
+                    return null;
+            }
+
+            return token;
         }
 
         /// <summary>把配置里的覆盖值写进指定 WorldGenConfiguration。</summary>
