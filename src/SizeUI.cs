@@ -190,9 +190,6 @@ namespace AdvancedWorldGen
 
             box = new tContentPatch.Content.UI.UITextBox(value.ToString());
             box.Text_MaxLength = 5;
-            box.SetTextScale(0.9f);
-            box.BackgroundColor = new Color(226, 230, 240);
-            box.BorderColor = new Color(120, 140, 200);
             box.Left.Set(200f, 0f);
             box.Top.Set(top, 0f);
             box.Width.Set(150f, 0f);

@@ -173,6 +173,59 @@ namespace AdvancedWorldGen
         }
     }
 
+    /// <summary>
+    /// tContentPatch 的 UITextBox 在不同 beta 版本里 API 不同：
+    /// beta16 是 UIPanel（可设 BackgroundColor/BorderColor/SetTextScale）；
+    /// beta17 改成 UIElement + 内部 Style1 白底黑字，颜色字段变成 UITextColor。
+    /// 这里用反射做兼容，避免任何一边编译/运行失败。
+    /// </summary>
+    internal static class TextBoxCompat
+    {
+        private static readonly PropertyInfo BorderProp =
+            typeof(tContentPatch.Content.UI.UITextBox).GetProperty(
+                "BorderColor", BindingFlags.Instance | BindingFlags.Public);
+
+        private static readonly FieldInfo TextColorField =
+            typeof(tContentPatch.Content.UI.UITextBox).GetField(
+                "UITextColor", BindingFlags.Instance | BindingFlags.Public);
+
+        public static void Normal(tContentPatch.Content.UI.UITextBox box)
+        {
+            Apply(box, new Color(110, 130, 190), Color.Black);
+        }
+
+        public static void Saved(tContentPatch.Content.UI.UITextBox box)
+        {
+            Apply(box, new Color(110, 190, 130), new Color(20, 130, 50));
+        }
+
+        public static void Error(tContentPatch.Content.UI.UITextBox box)
+        {
+            Apply(box, new Color(220, 96, 96), new Color(190, 30, 30));
+        }
+
+        private static void Apply(tContentPatch.Content.UI.UITextBox box, Color border, Color text)
+        {
+            if (box == null)
+                return;
+
+            try
+            {
+                if (BorderProp != null && BorderProp.CanWrite)
+                {
+                    BorderProp.SetValue(box, border, null);
+                    return;
+                }
+
+                if (TextColorField != null)
+                    TextColorField.SetValue(box, text);
+            }
+            catch
+            {
+            }
+        }
+    }
+
     internal static class SeedIcons
     {
         public static Texture2D FromItem(int id)
@@ -537,9 +590,6 @@ namespace AdvancedWorldGen
             _lastSeed = GetCurrentSeed();
             _seedInput = new tContentPatch.Content.UI.UITextBox(_lastSeed);
             _seedInput.Text_MaxLength = 40;
-            _seedInput.SetTextScale(0.9f);
-            _seedInput.BackgroundColor = new Color(10, 12, 22) * 0.95f;
-            _seedInput.BorderColor = new Color(120, 140, 200);
             _seedInput.Left.Set(64f, 0f);
             _seedInput.Top.Set(6f, 0f);
             _seedInput.Width.Set(300f, 0f);
