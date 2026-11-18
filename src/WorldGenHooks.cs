@@ -200,6 +200,9 @@ namespace AdvancedWorldGen
 
                 // 世界创建界面的模组图标按钮
                 CreateMenuPatch.Apply(_harmony);
+
+                // 生成界面的已用时间 / 预计剩余时间
+                GenEta.Apply(_harmony);
             }
             catch (Exception e)
             {
