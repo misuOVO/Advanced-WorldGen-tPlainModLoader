@@ -60,7 +60,11 @@
 
 - 生成前按当前进程内存 + 新地图预估做预算检查，自动缩小尺寸（LAA 预算 3.4 GB，未开 LAA 1.5 GB）；
 - 生成前 / 生成后各做一次 GC + LOH 压缩，并记录内存；
-- 附带 `tools/enable-laa.ps1`：给 Terraria.exe 开启 **Large Address Aware**，32 位进程可用 ~4GB 而不是 ~2GB（脚本自动备份为 `Terraria.exe.bak`）。
+- 附带 `tools/enable-laa.ps1`：给 **Terraria.exe / tPlainModLoader.exe / tPlainModLoaderInjector.exe** 统一开启 **Large Address Aware**，32 位进程可用 ~4GB 而不是 ~2GB（自动备份为 `.bak`）。
+
+> **注意**：如果你是用 `tPlainModLoader.exe` 启动游戏，游戏实际运行在 `tPlainModLoader.exe` 进程里，
+> 所以**这个 exe 也必须开启 LAA**（脚本会自动处理），只给 Terraria.exe 开是不够的。
+> 脚本需要在**游戏完全关闭**时运行；Steam 校验或加载器更新后重跑一次即可。
 
 ## 安装
 
