@@ -30,6 +30,9 @@ namespace AdvancedWorldGen
         // 省内存生成：生成前释放旧世界方块 / 地图数据，生成后再恢复
         public bool MemorySaver;
 
+        // 保存上一次世界创建设置：创建世界后不恢复默认
+        public bool RememberSettings;
+
         // 原版世界生成配置覆盖：路径 -> 值字符串（如 Biomes.CaveHouseBiome.IceChestChance）
         public Dictionary<string, string> WorldGenOverrides = new Dictionary<string, string>();
 
@@ -144,6 +147,52 @@ namespace AdvancedWorldGen
             {
                 Log.Write("AWG 配置保存失败: " + e.Message);
             }
+        }
+
+        /// <summary>
+        /// 种子选项联动世界大小：
+        /// - 常规世界 / 没有勾选任何特殊种子：关闭自定义尺寸
+        /// - 勾选 2 个及以上特殊种子：自动勾选自定义尺寸
+        /// - 只勾选 1 个：保持用户当前选择
+        /// </summary>
+        public static void ApplyAutoCustomSize(AwgConfig cfg)
+        {
+            if (cfg == null)
+                return;
+
+            int count = 0;
+
+            foreach (SeedEntry entry in SeedCatalog.All())
+            {
+                if (!entry.IsNormal && cfg.Has(entry.Key))
+                    count++;
+            }
+
+            if (count >= 2)
+                cfg.CustomSize = true;
+            else if (count == 0)
+                cfg.CustomSize = false;
+        }
+
+        /// <summary>
+        /// 恢复世界创建相关的默认设置（不清除“保存上一次设置”本身）。
+        /// </summary>
+        public void ResetWorldSettings()
+        {
+            Enabled = Enabled ?? new List<string>();
+            Enabled.Clear();
+
+            CelebrationBeachSpawn = false;
+            CelebrationPainted = false;
+            RandomWorld = false;
+            RandomPainted = false;
+
+            CustomSize = false;
+            CustomWidth = 8400;
+            CustomHeight = 2400;
+            MemorySaver = false;
+
+            WorldGenOverrides = new Dictionary<string, string>();
         }
     }
 }

@@ -1,8 +1,8 @@
-using System;
+﻿using System;
 using Terraria.UI;
 using tContentPatch;
 using tContentPatch.Content.UI;
-using tContentPatch.Content.UI.ModSet;
+using tContentPatch.Content.UI.Item1;
 
 namespace AdvancedWorldGen
 {
@@ -64,13 +64,14 @@ namespace AdvancedWorldGen
                 M.Enabled.Remove(normal.Key);
 
             M.Set(entry.Key, value);
+            AwgConfig.ApplyAutoCustomSize(M);
         }
 
         private UIItemSwitch Switch(string label, Func<bool> get, Action<bool> set)
         {
             UIItemSwitch item = new UIItemSwitch(null, label);
-            item.SetVal(get());
-            item.OnValUpdate = v =>
+            item.OnGetIsChecked = get;
+            item.OnSetIsChecked = v =>
             {
                 set(v);
                 Commit();
@@ -78,14 +79,14 @@ namespace AdvancedWorldGen
             return item;
         }
 
-        private UIItemValueSlider Slider(string label, int min, int max, Func<int> get, Action<int> set)
+        private UIItemValueSliderInt Slider(string label, int min, int max, Func<int> get, Action<int> set)
         {
-            UIItemValueSlider item = new UIItemValueSlider(min, max, null, label);
-            item.FloatToString = v => v.ToString("0");
-            item.SetVal(get());
-            item.OnValUpdate = v =>
+            UIItemValueSliderInt item = new UIItemValueSliderInt(min, max, null, label);
+            item.ValueToString = v => v.ToString("0");
+            item.OnGetValue = get;
+            item.OnSetValue = v =>
             {
-                set((int)Math.Round(v));
+                set(v);
                 Commit();
             };
             return item;
@@ -93,7 +94,7 @@ namespace AdvancedWorldGen
 
         public override UIElement GetUI()
         {
-            UIScrollViewer2 root = new UIScrollViewer2();
+            UIScrollViewer2 root = new UIScrollViewer2(false);
             root.Width.Precent = 1f;
             root.Height.Precent = 1f;
             root.ItemMargin = 4;
@@ -111,8 +112,8 @@ namespace AdvancedWorldGen
                 SeedEntry captured = entry;
 
                 UIItemSwitch item = new UIItemSwitch(null, captured.Title);
-                item.SetVal(IsOn(captured));
-                item.OnValUpdate = v =>
+                item.OnGetIsChecked = () => IsOn(captured);
+                item.OnSetIsChecked = v =>
                 {
                     Toggle(captured, v);
                     Commit();
@@ -139,19 +140,42 @@ namespace AdvancedWorldGen
             panel.Append(Switch("启用自定义大小",
                 () => M.CustomSize, v => M.CustomSize = v));
 
-            panel.Append(Slider("宽度（格）", 4200, 12000,
+            panel.Append(Slider("宽度（格）", 1800, 12000,
                 () => M.CustomWidth, v => M.CustomWidth = v));
 
-            panel.Append(Slider("高度（格）", 1200, 3600,
+            panel.Append(Slider("高度（格）", 600, 3600,
                 () => M.CustomHeight, v => M.CustomHeight = v));
 
             panel.Append(Switch("省内存生成（生成前释放旧世界/地图数据）",
                 () => M.MemorySaver, v => M.MemorySaver = v));
 
+            panel.Append(new UIItemTitle(null, "世界创建设置"));
+            panel.Append(Switch("保存上一次设置（创建世界后不恢复默认）",
+                () => M.RememberSettings, v => M.RememberSettings = v));
+            panel.Append(new UIItemTitle(null,
+                "关闭时：每次创建完世界，种子选项/秘密种子/世界大小/原版配置都会恢复默认。"));
+
             panel.Append(new UIItemTitle(null, "也可以在创建世界界面点种子栏右侧的齿轮设置。"));
 
             panel.Append(new UIItemTitle(null,
                 "原版配置修改：世界创建界面 → 齿轮 → 原版配置 ▸（宝箱概率、沙丘高度、地牢位置等）"));
+
+            panel.Append(new UIItemTitle(null,
+                "LAA（Large Address Aware）：让 32 位进程使用约 4GB 而不是 2GB，改完需要重启游戏"));
+
+            UIItemSwitch laa = new UIItemSwitch(null, "启用 LAA（Terraria / tPlainModLoader）");
+            laa.OnGetIsChecked = () => LaaToggle.IsOn();
+            laa.OnSetIsChecked = v =>
+            {
+                bool ok = LaaToggle.SetEnabled(v);
+
+                // LAA 不属于 config.json，直接写日志即可
+                Log.Write("AWG: LAA 开关 -> " + (v ? "开" : "关") + (ok ? "" : "（部分失败）"));
+            };
+            panel.Append(laa);
+
+            panel.Append(new UIItemTitle(null,
+                "注意：加载器更新后 LAA 会被重置，需要回来重新打开这个开关。"));
 
             root.AddChild(panel);
             return root;

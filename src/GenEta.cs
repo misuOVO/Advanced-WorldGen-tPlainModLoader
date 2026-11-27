@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Reflection;
 using HarmonyLib;
@@ -78,11 +78,14 @@ namespace AdvancedWorldGen
         private double _remainingSeconds = -1;
         private string _text = "";
 
+        private bool _abortRequested;
+        private bool _escHeld;
+
         public GenEtaPanel(UIElement bar)
         {
             _bar = bar;
 
-            Height.Set(28f, 0f);
+            Height.Set(52f, 0f);
             HAlign = 0f;
             VAlign = 0f;
             IgnoresMouseInteraction = true;
@@ -93,7 +96,35 @@ namespace AdvancedWorldGen
             base.Update(gameTime);
 
             FollowBar();
+            HandleCancelInput();
             UpdateText();
+        }
+
+        /// <summary>生成期间按 Esc 取消（原版会在当前 pass 结束后停下）。</summary>
+        private void HandleCancelInput()
+        {
+            try
+            {
+                bool esc = Main.keyState.IsKeyDown(Microsoft.Xna.Framework.Input.Keys.Escape);
+
+                if (esc && !_escHeld && !_abortRequested && WorldGen.generatingWorld)
+                {
+                    WorldGenerator.Controller controller = WorldGenerator.CurrentController;
+
+                    if (controller != null && !controller.QueuedAbort)
+                    {
+                        controller.QueuedAbort = true;
+                        _abortRequested = true;
+                        Log.Write("AWG: 用户按 Esc 取消世界生成（"
+                            + Main.maxTilesX + " x " + Main.maxTilesY + "）");
+                    }
+                }
+
+                _escHeld = esc;
+            }
+            catch
+            {
+            }
         }
 
         /// <summary>贴在原版进度条正下方，跟随它随窗口高度移动。</summary>
@@ -110,7 +141,7 @@ namespace AdvancedWorldGen
                 Left.Set(bar.X - parent.X, 0f);
                 Top.Set(bar.Y - parent.Y + bar.Height + 10f, 0f);
                 Width.Set(bar.Width, 0f);
-                Height.Set(28f, 0f);
+                Height.Set(52f, 0f);
                 HAlign = 0f;
                 VAlign = 0f;
             }
@@ -135,6 +166,7 @@ namespace AdvancedWorldGen
                 {
                     _progress = progress;
                     _remainingSeconds = -1;
+                    _abortRequested = false;
                 }
 
                 double percent = progress.TotalProgress;
@@ -144,6 +176,12 @@ namespace AdvancedWorldGen
 
                 if (percent > 1)
                     percent = 1;
+
+                if (_abortRequested)
+                {
+                    _text = "正在取消生成…（等待当前步骤结束，Esc 可重复按）";
+                    return;
+                }
 
                 TimeSpan elapsed = _watch.Elapsed;
 
@@ -192,6 +230,13 @@ namespace AdvancedWorldGen
                     d.Y + 2f);
 
                 UiPaint.Text(spriteBatch, _text, position, new Color(235, 242, 255), 1f);
+
+                const string hint = "按 Esc 取消生成";
+                Vector2 hintSize = FontAssets.MouseText.Value.MeasureString(hint) * 0.82f;
+
+                UiPaint.Text(spriteBatch, hint,
+                    new Vector2(d.X + (d.Width - hintSize.X) * 0.5f, d.Y + 26f),
+                    new Color(185, 198, 225), 0.82f);
             }
             catch
             {

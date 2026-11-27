@@ -11,7 +11,6 @@ using Terraria.GameContent.UI.States;
 using Terraria.ID;
 using Terraria.UI;
 using tContentPatch.Content.UI;
-using tContentPatch.Content.UI.ModSet;
 using TerrariaUtils = Terraria.Utils;
 
 namespace AdvancedWorldGen
@@ -21,6 +20,10 @@ namespace AdvancedWorldGen
     /// </summary>
     internal static class CreateMenuPatch
     {
+        private static readonly List<Action> SizeDeselectActions = new List<Action>();
+        private static UIText _descriptionText;
+        private static string _descriptionDefault;
+
         public static void Apply(HarmonyLib.Harmony harmony)
         {
             try
@@ -41,6 +44,49 @@ namespace AdvancedWorldGen
             catch (Exception e)
             {
                 Log.Write("AWG: 接管齿轮失败: " + e.Message);
+            }
+
+            // 点击原版小/中/大时关闭自定义尺寸，回到原版对应大小
+            try
+            {
+                MethodInfo sizeClick = typeof(UIWorldCreation).GetMethod(
+                    "ClickSizeOption",
+                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+
+                if (sizeClick != null)
+                {
+                    harmony.Patch(sizeClick, prefix: new HarmonyLib.HarmonyMethod(
+                        typeof(CreateMenuPatch).GetMethod(nameof(SizeOptionPrefix),
+                            BindingFlags.NonPublic | BindingFlags.Static)));
+
+                    Log.Write("AWG: 已接管世界大小按钮（选择原版尺寸时关闭自定义）");
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Write("AWG: 接管世界大小按钮失败: " + e.Message);
+            }
+
+            // 自定义尺寸选中时，取消原版小/中/大的选中高亮
+            try
+            {
+                MethodInfo updateSliders = typeof(UIWorldCreation).GetMethod(
+                    "UpdateSliders",
+                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public,
+                    null, Type.EmptyTypes, null);
+
+                if (updateSliders != null)
+                {
+                    harmony.Patch(updateSliders, postfix: new HarmonyLib.HarmonyMethod(
+                        typeof(CreateMenuPatch).GetMethod(nameof(UpdateSlidersPostfix),
+                            BindingFlags.NonPublic | BindingFlags.Static)));
+
+                    Log.Write("AWG: 已挂 UpdateSliders（自定义时取消原版大小高亮）");
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Write("AWG: 挂 UpdateSliders 失败: " + e.Message);
             }
 
             try
@@ -104,10 +150,239 @@ namespace AdvancedWorldGen
                     __instance.Append(new ModIconButton(__instance));
                     Log.Write("AWG: 没找到齿轮，图标按钮放到右上角");
                 }
+
+                AddCustomSizeButton(__instance);
             }
             catch (Exception e)
             {
                 Log.Write("AWG: 添加图标按钮失败: " + e.Message);
+            }
+        }
+
+        private static void SizeOptionPrefix()
+        {
+            try
+            {
+                AwgConfig.Instance.CustomSize = false;
+                AwgConfig.Save();
+            }
+            catch
+            {
+            }
+        }
+
+        private static void UpdateSlidersPostfix()
+        {
+            try
+            {
+                if (AwgConfig.Instance != null && AwgConfig.Instance.CustomSize)
+                    DeselectSizeButtons();
+            }
+            catch
+            {
+            }
+        }
+
+        private static void DeselectSizeButtons()
+        {
+            for (int i = 0; i < SizeDeselectActions.Count; i++)
+            {
+                try
+                {
+                    SizeDeselectActions[i]();
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        private static void SetCustomDescription(UIWorldCreation menu)
+        {
+            try
+            {
+                if (_descriptionText == null)
+                {
+                    FieldInfo field = typeof(UIWorldCreation).GetField(
+                        "_descriptionText",
+                        BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+
+                    _descriptionText = field != null ? field.GetValue(menu) as UIText : null;
+
+                    if (_descriptionText != null)
+                        _descriptionDefault = _descriptionText.Text;
+                }
+
+                if (_descriptionText != null)
+                    _descriptionText.SetText("左键选择自定义　右键自定义世界大小");
+            }
+            catch
+            {
+            }
+        }
+
+        private static void RestoreDescription()
+        {
+            try
+            {
+                if (_descriptionText != null)
+                    _descriptionText.SetText(_descriptionDefault ?? "");
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>
+        /// 在原版 小/中/大 右边插入一个「自定义」选项。
+        /// 原版三个按钮重新按 4 列排布，保证宽度一致。
+        /// </summary>
+        private static void AddCustomSizeButton(UIWorldCreation menu)
+        {
+            try
+            {
+                FieldInfo field = typeof(UIWorldCreation).GetField(
+                    "_sizeButtons",
+                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+
+                Array buttons = field != null ? field.GetValue(menu) as Array : null;
+
+                if (buttons == null || buttons.Length == 0)
+                {
+                    Log.Write("AWG: 没找到世界大小按钮，跳过自定义选项");
+                    return;
+                }
+
+                UIElement first = buttons.GetValue(0) as UIElement;
+                if (first == null || first.Parent == null)
+                    return;
+
+                // 记录原版底部描述文本，用于悬停“自定义”时替换
+                try
+                {
+                    FieldInfo descField = typeof(UIWorldCreation).GetField(
+                        "_descriptionText",
+                        BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+
+                    _descriptionText = descField != null ? descField.GetValue(menu) as UIText : null;
+
+                    if (_descriptionText != null)
+                        _descriptionDefault = _descriptionText.Text;
+                }
+                catch
+                {
+                }
+
+                int count = buttons.Length + 1;
+                float usable = 1f - first.Left.Precent;
+
+                SizeDeselectActions.Clear();
+
+                for (int i = 0; i < buttons.Length; i++)
+                {
+                    UIElement button = buttons.GetValue(i) as UIElement;
+                    if (button == null)
+                        continue;
+
+                    button.Width.Set(-4f * (count - 1), usable / count);
+                    button.HAlign = (float)i / (count - 1);
+                    button.Left.Set(0f, 1f - usable);
+
+                    MethodInfo setter = button.GetType().GetMethod(
+                        "SetCurrentOption", BindingFlags.Instance | BindingFlags.Public);
+
+                    if (setter == null)
+                        continue;
+
+                    Type optionType = setter.GetParameters()[0].ParameterType;
+                    object none = Enum.ToObject(optionType, -1);
+                    UIElement target = button;
+                    MethodInfo method = setter;
+
+                    SizeDeselectActions.Add(() =>
+                    {
+                        try
+                        {
+                            method.Invoke(target, new[] { none });
+                        }
+                        catch
+                        {
+                        }
+                    });
+                }
+
+                GroupOptionButton<int> custom = new GroupOptionButton<int>(
+                    3,
+                    Terraria.Lang.menu[94],
+                    Terraria.Localization.Language.GetText("UI.WorldDescriptionSizeLarge"),
+                    Color.LimeGreen,
+                    "Images/UI/WorldCreation/IconSizeLarge",
+                    1f, 1f, 16f);
+
+                custom.SetTextWithoutLocalization("自定义", 1f, Color.White, 0.5f, 0f);
+                custom.Width.Set(-4f * (count - 1), usable / count);
+                custom.Height.Set(first.Height.Pixels, first.Height.Precent);
+                custom.Left.Set(0f, 1f - usable);
+                custom.HAlign = 1f;
+                custom.Top.Set(first.Top.Pixels, first.Top.Precent);
+
+                custom.OnUpdate += _ =>
+                {
+                    custom.SetCurrentOption(AwgConfig.Instance.CustomSize ? 3 : -1);
+
+                    if (AwgConfig.Instance.CustomSize)
+                        DeselectSizeButtons();
+                };
+
+                custom.OnLeftMouseDown += (evt, el) =>
+                {
+                    try
+                    {
+                        // 左键：只选中“自定义”，不跳转
+                        AwgConfig.Instance.CustomSize = true;
+                        AwgConfig.Save();
+                    }
+                    catch (Exception e)
+                    {
+                        Log.Write("AWG: 选择自定义世界大小失败: " + e.Message);
+                    }
+                };
+
+                custom.OnRightClick += (evt, el) =>
+                {
+                    try
+                    {
+                        // 右键：打开世界大小面板
+                        AwgConfig.Instance.CustomSize = true;
+                        AwgConfig.Save();
+                        Main.MenuUI.SetState(new SizeState(menu, true));
+                    }
+                    catch (Exception e)
+                    {
+                        Log.Write("AWG: 打开自定义世界大小失败: " + e.Message);
+                    }
+                };
+
+                custom.OnMouseOver += (evt, el) =>
+                {
+                    Main.hoverItemName = "自定义世界大小";
+                    SetCustomDescription(menu);
+                };
+
+                custom.OnMouseOut += (evt, el) =>
+                {
+                    if (Main.hoverItemName == "自定义世界大小")
+                        Main.hoverItemName = "";
+
+                    RestoreDescription();
+                };
+
+                first.Parent.Append(custom);
+                Log.Write("AWG: 已添加自定义世界大小选项");
+            }
+            catch (Exception e)
+            {
+                Log.Write("AWG: 添加自定义世界大小选项失败: " + e.Message);
             }
         }
     }
@@ -118,9 +393,132 @@ namespace AdvancedWorldGen
 
     internal static class UiPaint
     {
+        private static Texture2D _panelBackground;
+        private static Texture2D _panelBorder;
+
         public static void Fill(SpriteBatch sb, Rectangle r, Color c)
         {
             sb.Draw(TextureAssets.MagicPixel.Value, r, c);
+        }
+
+        /// <summary>
+        /// 用原版面板贴图（PanelBackground + PanelBorder）画九宫格，
+        /// 让自定义面板和泰拉瑞亚原生 UI 一致。
+        /// </summary>
+        public static void Panel(SpriteBatch sb, Rectangle r, Color background, Color border,
+            int corner = 12, int bar = 4)
+        {
+            if (r.Width <= 0 || r.Height <= 0)
+                return;
+
+            if (_panelBackground == null)
+            {
+                try
+                {
+                    _panelBackground = Main.Assets.Request<Texture2D>("Images/UI/PanelBackground").Value;
+                }
+                catch
+                {
+                }
+            }
+
+            if (_panelBorder == null)
+            {
+                try
+                {
+                    _panelBorder = Main.Assets.Request<Texture2D>("Images/UI/PanelBorder").Value;
+                }
+                catch
+                {
+                }
+            }
+
+            if (_panelBackground != null)
+                NineSlice(sb, _panelBackground, r, background, corner, bar);
+
+            if (_panelBorder != null)
+                NineSlice(sb, _panelBorder, r, border, corner, bar);
+        }
+
+        private static void NineSlice(SpriteBatch sb, Texture2D tex, Rectangle r, Color color,
+            int corner, int bar)
+        {
+            int c = Math.Min(corner, Math.Min(r.Width, r.Height) / 2);
+
+            if (c < 1)
+                return;
+
+            int right = r.X + r.Width - c;
+            int bottom = r.Y + r.Height - c;
+            int midW = right - r.X - c;
+            int midH = bottom - r.Y - c;
+
+            // 四角
+            sb.Draw(tex, new Rectangle(r.X, r.Y, c, c), new Rectangle(0, 0, c, c), color);
+            sb.Draw(tex, new Rectangle(right, r.Y, c, c), new Rectangle(c + bar, 0, c, c), color);
+            sb.Draw(tex, new Rectangle(r.X, bottom, c, c), new Rectangle(0, c + bar, c, c), color);
+            sb.Draw(tex, new Rectangle(right, bottom, c, c), new Rectangle(c + bar, c + bar, c, c), color);
+
+            if (midW > 0)
+            {
+                sb.Draw(tex, new Rectangle(r.X + c, r.Y, midW, c), new Rectangle(c, 0, bar, c), color);
+                sb.Draw(tex, new Rectangle(r.X + c, bottom, midW, c), new Rectangle(c, c + bar, bar, c), color);
+            }
+
+            if (midH > 0)
+            {
+                sb.Draw(tex, new Rectangle(r.X, r.Y + c, c, midH), new Rectangle(0, c, c, bar), color);
+                sb.Draw(tex, new Rectangle(right, r.Y + c, c, midH), new Rectangle(c + bar, c, c, bar), color);
+            }
+
+            if (midW > 0 && midH > 0)
+            {
+                sb.Draw(tex, new Rectangle(r.X + c, r.Y + c, midW, midH),
+                    new Rectangle(c, c, bar, bar), color);
+            }
+        }
+
+        /// <summary>
+        /// 单行/按钮用的小面板：原版设置项用的 SettingsPanel 贴图（2px 边框 + 拉伸中心），
+        /// 比大面板的 PanelBackground 更适合 30~40px 高的条目。
+        /// </summary>
+        public static void RowPanel(SpriteBatch sb, Rectangle r, Color color)
+        {
+            if (r.Width <= 4 || r.Height <= 4)
+                return;
+
+            Texture2D tex = null;
+
+            try
+            {
+                tex = TextureAssets.SettingsPanel.Value;
+            }
+            catch
+            {
+            }
+
+            if (tex == null)
+            {
+                Fill(sb, r, color);
+                return;
+            }
+
+            const int edge = 2;
+            int x = r.X;
+            int y = r.Y;
+            int w = r.Width;
+            int h = r.Height;
+            Rectangle slice = new Rectangle(edge, 0, 1, 1);
+
+            sb.Draw(tex, new Rectangle(x, y + edge, edge, h - edge * 2), slice, color);
+            sb.Draw(tex, new Rectangle(x + w - edge, y + edge, edge, h - edge * 2), slice, color);
+            sb.Draw(tex, new Rectangle(x + edge, y, w - edge * 2, edge), slice, color);
+            sb.Draw(tex, new Rectangle(x + edge, y + h - edge, w - edge * 2, edge), slice, color);
+
+            sb.Draw(tex,
+                new Rectangle(x + edge, y + edge, w - edge * 2, h - edge * 2),
+                new Rectangle(edge, edge, tex.Width - edge * 2, tex.Height - edge * 2),
+                color);
         }
 
         public static void Outline(SpriteBatch sb, Rectangle r, Color c, int t = 1)
@@ -192,6 +590,32 @@ namespace AdvancedWorldGen
         public static void Normal(tContentPatch.Content.UI.UITextBox box)
         {
             Apply(box, new Color(110, 130, 190), Color.Black);
+        }
+
+        /// <summary>
+        /// 新版 UITextBox 的 UIText 默认 TextOriginX = 0.5，且元素宽度为 0，
+        /// 导致文字按自身中心绘制、越输越往左跑。这里强制改成从左边绘制。
+        /// </summary>
+        public static void LeftAlign(tContentPatch.Content.UI.UITextBox box)
+        {
+            try
+            {
+                FieldInfo field = typeof(tContentPatch.Content.UI.UITextBox).GetField(
+                    "UIText", BindingFlags.Instance | BindingFlags.Public);
+
+                object ui = field != null ? field.GetValue(box) : null;
+                if (ui == null)
+                    return;
+
+                PropertyInfo origin = ui.GetType().GetProperty(
+                    "TextOriginX", BindingFlags.Instance | BindingFlags.Public);
+
+                if (origin != null && origin.CanWrite)
+                    origin.SetValue(ui, 0f, null);
+            }
+            catch
+            {
+            }
         }
 
         public static void Saved(tContentPatch.Content.UI.UITextBox box)
@@ -339,8 +763,7 @@ namespace AdvancedWorldGen
         {
             CalculatedStyle d = GetDimensions();
             Rectangle r = new Rectangle((int)d.X, (int)d.Y, (int)d.Width, (int)d.Height);
-            UiPaint.Fill(spriteBatch, r, _fill);
-            UiPaint.Outline(spriteBatch, r, _border);
+            UiPaint.Panel(spriteBatch, r, _fill, _border);
         }
     }
 
@@ -500,6 +923,91 @@ namespace AdvancedWorldGen
         }
     }
 
+    internal class CustomSizeOptionButton : UIElement
+    {
+        private static Texture2D _icon;
+
+        public CustomSizeOptionButton(UIWorldCreation menu)
+        {
+            OnLeftClick += (evt, el) =>
+            {
+                try
+                {
+                    AwgConfig.Instance.CustomSize = true;
+                    AwgConfig.Save();
+                    Main.MenuUI.SetState(new SizeState(menu, true));
+                }
+                catch (Exception e)
+                {
+                    Log.Write("AWG: 打开自定义世界大小失败: " + e.Message);
+                }
+            };
+
+            OnMouseOver += (evt, el) => Main.hoverItemName = "自定义世界大小";
+            OnMouseOut += (evt, el) =>
+            {
+                if (Main.hoverItemName == "自定义世界大小")
+                    Main.hoverItemName = "";
+            };
+        }
+
+        private static Texture2D Icon
+        {
+            get
+            {
+                if (_icon == null)
+                {
+                    try
+                    {
+                        _icon = Main.Assets.Request<Texture2D>(
+                            "Images/UI/WorldCreation/IconSizeLarge").Value;
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                return _icon;
+            }
+        }
+
+        protected override void DrawSelf(SpriteBatch spriteBatch)
+        {
+            CalculatedStyle d = GetDimensions();
+            Rectangle rect = new Rectangle((int)d.X, (int)d.Y, (int)d.Width, (int)d.Height);
+
+            bool on = AwgConfig.Instance != null && AwgConfig.Instance.CustomSize;
+
+            Color bg = on
+                ? new Color(70, 122, 86)
+                : new Color(70, 88, 150);
+
+            if (IsMouseHovering)
+                bg = new Color(Math.Min(255, bg.R + 24), Math.Min(255, bg.G + 24),
+                    Math.Min(255, bg.B + 30));
+
+            UiPaint.RowPanel(spriteBatch, rect, bg);
+
+            if (on)
+                UiPaint.Outline(spriteBatch, rect, new Color(255, 225, 130), 2);
+
+            Texture2D icon = Icon;
+            if (icon != null && icon.Width > 0)
+            {
+                const float box = 22f;
+                float scale = Math.Min(box / icon.Width, box / icon.Height);
+                float w = icon.Width * scale;
+                float h = icon.Height * scale;
+
+                spriteBatch.Draw(icon,
+                    new Vector2(rect.X + 8f + (box - w) / 2f, rect.Y + (rect.Height - h) / 2f),
+                    null, Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
+            }
+
+            UiPaint.CenteredText(spriteBatch, "自定义", rect, Color.White, 0.9f);
+        }
+    }
+
     // ------------------------------------------------------------------
     // 种子选项面板
     // ------------------------------------------------------------------
@@ -552,11 +1060,23 @@ namespace AdvancedWorldGen
             panel.SetPadding(0f);
             Append(panel);
 
-            UIText title = new UIText("种子选项", 1.3f, true);
-            title.HAlign = 0f;
-            title.Left.Set(24f, 0f);
-            title.Top.Set(12f, 0f);
-            panel.Append(title);
+            TextButton combosButton = new TextButton("特殊种子组合 ▸");
+            combosButton.Left.Set(24f, 0f);
+            combosButton.Top.Set(18f, 0f);
+            combosButton.Width.Set(176f, 0f);
+            combosButton.Height.Set(34f, 0f);
+            combosButton.OnLeftClick += (evt, el) =>
+            {
+                try
+                {
+                    Main.MenuUI.SetState(new SeedCombosState(_previous));
+                }
+                catch (Exception e)
+                {
+                    Log.Write("AWG: 打开特殊种子组合失败: " + e.Message);
+                }
+            };
+            panel.Append(combosButton);
 
             TextButton sizeButton = new TextButton("世界大小 ▸");
             sizeButton.Left.Set(panelW - 406f, 0f);
@@ -628,10 +1148,11 @@ namespace AdvancedWorldGen
 
             _lastSeed = GetCurrentSeed();
             _seedInput = new tContentPatch.Content.UI.UITextBox(_lastSeed);
-            _seedInput.Text_MaxLength = 40;
+            TextBoxCompat.LeftAlign(_seedInput);
+            _seedInput.MaxInputLength = 40;
             _seedInput.Left.Set(64f, 0f);
             _seedInput.Top.Set(6f, 0f);
-            _seedInput.Width.Set(300f, 0f);
+            _seedInput.Width.Set(-220f, 1f);
             _seedInput.Height.Set(32f, 0f);
             seedBg.Append(_seedInput);
 
@@ -687,6 +1208,7 @@ namespace AdvancedWorldGen
                             cfg.Set(captured.Key, !cfg.Has(captured.Key));
                         }
 
+                        AwgConfig.ApplyAutoCustomSize(cfg);
                         AwgConfig.Save();
                         RefreshCount();
                     },
@@ -774,6 +1296,7 @@ namespace AdvancedWorldGen
                     if (!entry.IsNormal)
                         cfg.Enabled.Add(entry.Key);
                 }
+                AwgConfig.ApplyAutoCustomSize(cfg);
                 AwgConfig.Save();
                 RefreshCount();
             };
@@ -783,6 +1306,7 @@ namespace AdvancedWorldGen
             none.OnLeftClick += (evt, el) =>
             {
                 AwgConfig.Instance.Enabled.Clear();
+                AwgConfig.ApplyAutoCustomSize(AwgConfig.Instance);
                 AwgConfig.Save();
                 RefreshCount();
             };
@@ -852,7 +1376,7 @@ namespace AdvancedWorldGen
 
             try
             {
-                _seedInput?.SetText(text);
+                _seedInput.Text = text;
             }
             catch
             {
@@ -986,19 +1510,16 @@ namespace AdvancedWorldGen
             bool on = _isOn != null && _isOn();
 
             Color bg = on
-                ? new Color(58, 96, 74, 190)
-                : new Color(30, 38, 62, 190);
+                ? new Color(70, 122, 86)
+                : new Color(70, 88, 150);
 
             if (IsMouseHovering)
                 bg = new Color(
-                    Math.Min(255, bg.R + 25),
-                    Math.Min(255, bg.G + 25),
-                    Math.Min(255, bg.B + 30),
-                    bg.A);
+                    Math.Min(255, bg.R + 24),
+                    Math.Min(255, bg.G + 24),
+                    Math.Min(255, bg.B + 30));
 
-            UiPaint.Fill(spriteBatch, rect, bg);
-            UiPaint.Outline(spriteBatch, rect,
-                on ? new Color(130, 210, 145, 160) : new Color(90, 110, 160, 110));
+            UiPaint.RowPanel(spriteBatch, rect, bg);
 
             int textX = 16;
 
@@ -1050,12 +1571,10 @@ namespace AdvancedWorldGen
             Rectangle rect = new Rectangle((int)d.X, (int)d.Y, (int)d.Width, (int)d.Height);
 
             Color bg = IsMouseHovering
-                ? new Color(96, 122, 196)
-                : new Color(58, 74, 132);
+                ? new Color(90, 115, 190)
+                : new Color(73, 94, 171);
 
-            UiPaint.Fill(spriteBatch, rect, bg);
-            UiPaint.Outline(spriteBatch, rect,
-                IsMouseHovering ? new Color(190, 210, 255) : new Color(120, 140, 200), 2);
+            UiPaint.RowPanel(spriteBatch, rect, bg);
 
             if (IsMouseHovering)
             {

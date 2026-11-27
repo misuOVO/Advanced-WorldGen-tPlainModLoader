@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -198,16 +198,96 @@ namespace AdvancedWorldGen
                     Log.Write("AWG: 挂 LoadWorld 失败: " + e.Message);
                 }
 
+                // 世界列表里自定义尺寸显示“未知世界”，改成 宽×高
+                try
+                {
+                    PropertyInfo sizeName = typeof(WorldFileData).GetProperty(
+                        "WorldSizeName",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+                    MethodInfo getter = sizeName != null ? sizeName.GetGetMethod(true) : null;
+
+                    if (getter != null)
+                    {
+                        _harmony.Patch(getter, postfix: new HarmonyMethod(
+                            typeof(WorldGenHooks).GetMethod(nameof(WorldSizeNamePostfix),
+                                BindingFlags.NonPublic | BindingFlags.Static)));
+
+                        Log.Write("AWG: 已挂 WorldFileData.WorldSizeName（自定义尺寸显示宽×高）");
+                    }
+                }
+                catch (Exception e)
+                {
+                    Log.Write("AWG: 挂世界尺寸名称失败: " + e.Message);
+                }
+
                 // 世界创建界面的模组图标按钮
                 CreateMenuPatch.Apply(_harmony);
 
                 // 生成界面的已用时间 / 预计剩余时间
                 GenEta.Apply(_harmony);
+
+                // 极端小尺寸下，原版生成器偶尔会出现 Next(min, max) 里 min > max，
+                // 直接抛 ArgumentOutOfRangeException 导致整张图生成失败。
+                // 仅在生成期间把这种非法区间交换过来，避免极小世界直接崩掉。
+                try
+                {
+                    MethodInfo next = typeof(Terraria.Utilities.UnifiedRandom).GetMethod(
+                        "Next",
+                        BindingFlags.Instance | BindingFlags.Public,
+                        null,
+                        new[] { typeof(int), typeof(int) },
+                        null);
+
+                    if (next != null)
+                    {
+                        _harmony.Patch(next, prefix: new HarmonyMethod(
+                            typeof(WorldGenHooks).GetMethod(nameof(NextRangePrefix),
+                                BindingFlags.NonPublic | BindingFlags.Static)));
+
+                        Log.Write("AWG: 已挂 UnifiedRandom.Next(int,int)（极小世界范围保护）");
+                    }
+                }
+                catch (Exception e)
+                {
+                    Log.Write("AWG: 挂随机范围保护失败: " + e.Message);
+                }
             }
             catch (Exception e)
             {
                 Log.Write("AWG 挂载失败: " + e);
             }
+        }
+
+        private static void WorldSizeNamePostfix(WorldFileData __instance, ref string __result)
+        {
+            try
+            {
+                if (__instance == null || __result == null)
+                    return;
+
+                if (__instance.WorldSizeX <= 0 || __instance.WorldSizeY <= 0)
+                    return;
+
+                if (__result == Terraria.Localization.Language.GetTextValue("UI.WorldSizeUnknown"))
+                    __result = __instance.WorldSizeX + "×" + __instance.WorldSizeY;
+            }
+            catch
+            {
+            }
+        }
+
+        private static bool NextRangePrefix(ref int minValue, ref int maxValue)
+        {
+            // 只在地图生成期间兜底；正常游戏里 min > max 本来就不会出现。
+            if (WorldGen.generatingWorld && minValue > maxValue)
+            {
+                int swap = minValue;
+                minValue = maxValue;
+                maxValue = swap;
+            }
+
+            return true;
         }
 
         private static void ResetPrefix()
@@ -346,6 +426,33 @@ namespace AdvancedWorldGen
 
             // 生成后回收一次，减少 32 位进程的碎片/峰值
             TrimMemory("生成后", false);
+
+            // 未开启“保存上一次设置”时，创建完世界后恢复默认世界设置
+            try
+            {
+                AwgConfig cfg = AwgConfig.Instance;
+
+                if (cfg != null && !cfg.RememberSettings)
+                {
+                    cfg.ResetWorldSettings();
+                    AwgConfig.Save();
+
+                    try
+                    {
+                        // 秘密种子属于游戏侧开关，一并恢复为默认（世界已生成，不影响存档）
+                        WorldGen.SecretSeed.ClearAllSeeds();
+                    }
+                    catch
+                    {
+                    }
+
+                    Log.Write("AWG: 创建世界完成，已恢复默认世界设置（保存上一次设置=关）");
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Write("AWG: 恢复默认世界设置失败: " + e.Message);
+            }
         }
 
         private static void GenerateWorldPrefix()
@@ -356,8 +463,8 @@ namespace AdvancedWorldGen
                 if (!cfg.CustomSize)
                     return;
 
-                int width = Math.Min(12000, Math.Max(4200, cfg.CustomWidth));
-                int height = Math.Min(3600, Math.Max(1200, cfg.CustomHeight));
+                int width = Math.Min(12000, Math.Max(1800, cfg.CustomWidth));
+                int height = Math.Min(3600, Math.Max(600, cfg.CustomHeight));
 
                 // 上一次生成如果中途失败，地图数据可能还停在 1x1，先补回来
                 if (_deferMap)
@@ -368,12 +475,18 @@ namespace AdvancedWorldGen
                         Math.Max(2400, ((Main.maxTilesY + 149) / 150) * 150));
                 }
 
-                // 省内存模式：生成开始前先把地图数据和上一局残留放掉，
-                // 这样后面估算预算时用的是真实可用内存。
-                if (cfg.MemorySaver)
+                // 省内存模式：只有确实要扩到原版上限以上时才释放地图 / 压缩堆。
+                // 小世界没有必要，而且在接近 2GB 时压缩大对象堆本身就可能 OOM。
+                if (cfg.MemorySaver && (width > 8400 || height > 2400))
                     ReleaseBeforeGeneration();
 
                 ApplyMemoryBudget(ref width, ref height, cfg.MemorySaver);
+
+                // 原版 sectionManager 用的是 maxTiles / 200 和 / 150 的整除，
+                // 尺寸不是 200×150 的整数倍时会少一节，导致边缘的格子不加载。
+                // 自定义尺寸统一向上取整到 section 边界。
+                width = ((width + Main.sectionWidth - 1) / Main.sectionWidth) * Main.sectionWidth;
+                height = ((height + Main.sectionHeight - 1) / Main.sectionHeight) * Main.sectionHeight;
 
                 Main.maxTilesX = width;
                 Main.maxTilesY = height;
@@ -451,14 +564,16 @@ namespace AdvancedWorldGen
         {
             try
             {
-                if (compactLoh)
+                // 未开 LAA 时地址空间只有 2GB，压缩 LOH 需要额外空间搬大对象，
+                // 在内存已经很高的时候反而会直接 OOM，所以只在 LAA 下执行。
+                if (compactLoh && IsLargeAddressAware())
                     GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
 
                 GC.Collect(2, GCCollectionMode.Forced, true);
                 GC.WaitForPendingFinalizers();
                 GC.Collect(2, GCCollectionMode.Forced, true);
 
-                if (compactLoh)
+                if (compactLoh && IsLargeAddressAware())
                     GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.Default;
             }
             catch (Exception e)

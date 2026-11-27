@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -77,7 +77,8 @@ namespace AdvancedWorldGen
             panel.Append(toolbar);
 
             _searchBox = new UITextBox("搜索名称或路径…");
-            _searchBox.Text_MaxLength = 40;
+            TextBoxCompat.LeftAlign(_searchBox);
+            _searchBox.MaxInputLength = 40;
             _searchBox.Left.Set(10f, 0f);
             _searchBox.Top.Set(4f, 0f);
             _searchBox.Width.Set(330f, 0f);
@@ -110,7 +111,7 @@ namespace AdvancedWorldGen
             toolbar.Append(tip);
 
             // ---- 列表 ----
-            _scroll = new UIScrollViewer2();
+            _scroll = new UIScrollViewer2(false);
             _scroll.Left.Set(20f, 0f);
             _scroll.Top.Set(114f, 0f);
             _scroll.Width.Set(-40f, 1f);
@@ -442,13 +443,14 @@ namespace AdvancedWorldGen
             else
             {
                 _box = new UITextBox("");
-                _box.Text_MaxLength = 40;
+                TextBoxCompat.LeftAlign(_box);
+                _box.MaxInputLength = 40;
                 _box.HAlign = 1f;
                 _box.Left.Set(-12f, 0f);
                 _box.Top.Set(1f, 0f);
                 _box.Width.Set(192f, 0f);
                 _box.Height.Set(32f, 0f);
-                _box.SetText(_applied);
+                _box.Text = _applied;
                 _box.OnLostFocus = Commit;
                 Append(_box);
             }
@@ -469,7 +471,7 @@ namespace AdvancedWorldGen
 
             if (_box != null)
             {
-                _box.SetText(_applied);
+                _box.Text = _applied;
                 TextBoxCompat.Normal(_box);
             }
         }
@@ -558,11 +560,10 @@ namespace AdvancedWorldGen
             Rectangle rect = new Rectangle((int)d.X, (int)d.Y, (int)d.Width, (int)d.Height);
 
             Color bg = IsMouseHovering
-                ? new Color(60, 78, 130, 200)
-                : new Color(24, 30, 50, 190);
+                ? new Color(86, 108, 176)
+                : new Color(70, 88, 150);
 
-            UiPaint.Fill(spriteBatch, rect, bg);
-            UiPaint.Outline(spriteBatch, rect, new Color(90, 110, 160, 120));
+            UiPaint.RowPanel(spriteBatch, rect, bg);
 
             // 已修改的项前面点一个黄点
             if (_entry.Overridden)
@@ -599,9 +600,9 @@ namespace AdvancedWorldGen
 
             HAlign = 1f;
             Left.Set(-12f, 0f);
-            Top.Set(2f, 0f);
+            Top.Set(1f, 0f);
             Width.Set(192f, 0f);
-            Height.Set(30f, 0f);
+            Height.Set(32f, 0f);
 
             SyncFromEntry();
 
@@ -631,18 +632,16 @@ namespace AdvancedWorldGen
             Rectangle rect = new Rectangle((int)d.X, (int)d.Y, (int)d.Width, (int)d.Height);
 
             Color bg = IsMouseHovering
-                ? new Color(74, 100, 168, 235)
-                : new Color(52, 68, 116, 215);
+                ? new Color(92, 116, 190)
+                : new Color(73, 94, 171);
 
-            UiPaint.Fill(spriteBatch, rect, bg);
-            UiPaint.Outline(spriteBatch, rect,
-                IsMouseHovering ? new Color(180, 205, 255) : new Color(120, 145, 205));
+            UiPaint.RowPanel(spriteBatch, rect, bg);
 
             UiPaint.Text(spriteBatch, "<",
-                new Vector2(rect.X + 8f, rect.Y + 5f), new Color(200, 215, 245), 0.85f);
+                new Vector2(rect.X + 10f, rect.Y + 6f), new Color(200, 215, 245), 0.85f);
 
             UiPaint.Text(spriteBatch, ">",
-                new Vector2(rect.Right - 18f, rect.Y + 5f), new Color(200, 215, 245), 0.85f);
+                new Vector2(rect.Right - 22f, rect.Y + 6f), new Color(200, 215, 245), 0.85f);
 
             string label = _index >= 0 && _index < Labels.Length
                 ? Labels[_index]
@@ -673,16 +672,14 @@ namespace AdvancedWorldGen
             bool on = _isOn != null && _isOn();
 
             Color bg = on
-                ? new Color(58, 96, 74, 210)
-                : new Color(40, 52, 90, 200);
+                ? new Color(70, 122, 86)
+                : new Color(70, 88, 150);
 
             if (IsMouseHovering)
                 bg = new Color(Math.Min(255, bg.R + 24), Math.Min(255, bg.G + 24),
-                    Math.Min(255, bg.B + 30), bg.A);
+                    Math.Min(255, bg.B + 30));
 
-            UiPaint.Fill(spriteBatch, rect, bg);
-            UiPaint.Outline(spriteBatch, rect,
-                on ? new Color(140, 220, 155) : new Color(110, 130, 190));
+            UiPaint.RowPanel(spriteBatch, rect, bg);
             UiPaint.CenteredText(spriteBatch, _text, rect,
                 on ? new Color(230, 255, 235) : new Color(225, 232, 250), 0.8f);
         }

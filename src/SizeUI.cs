@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using Microsoft.Xna.Framework;
 using Terraria;
@@ -15,21 +15,24 @@ namespace AdvancedWorldGen
     internal class SizeState : UIState
     {
         private const int PanelW = 660;
-        private const int PanelH = 560;
+        private const int PanelH = 640;
 
         private readonly UIWorldCreation _previous;
+        private readonly bool _returnToCreation;
 
         private tContentPatch.Content.UI.UITextBox _widthBox;
         private tContentPatch.Content.UI.UITextBox _heightBox;
         private UIText _memoryText;
+        private UIText _warningText;
         private UIText _status;
         private string _lastWidth = "";
         private string _lastHeight = "";
         private int _memoryTimer;
 
-        public SizeState(UIWorldCreation previous)
+        public SizeState(UIWorldCreation previous, bool returnToCreation = false)
         {
             _previous = previous;
+            _returnToCreation = returnToCreation;
             Build();
         }
 
@@ -70,9 +73,9 @@ namespace AdvancedWorldGen
             enable.Top.Set(8f, 0f);
             area.Append(enable);
 
-            AddNumberRow(area, 58f, "宽度（格）", 4200, 12000,
+            AddNumberRow(area, 58f, "宽度（格）", 1800, 12000,
                 AwgConfig.Instance.CustomWidth, out _widthBox, ref _lastWidth);
-            AddNumberRow(area, 100f, "高度（格）", 1200, 3600,
+            AddNumberRow(area, 100f, "高度（格）", 600, 3600,
                 AwgConfig.Instance.CustomHeight, out _heightBox, ref _lastHeight);
 
             ToggleRow saver = new ToggleRow(
@@ -91,7 +94,7 @@ namespace AdvancedWorldGen
             area.Append(saver);
 
             UIText hint = new UIText(
-                "范围：宽度 4200~12000，高度 1200~3600。开启「省内存生成」时可以少占几百 MB，更容易生成超大世界。",
+                "范围：宽度 1800~12000，高度 600~3600。低于 2100×900 会提示实验性尺寸；自定义尺寸会自动向上取整到 200×150。",
                 0.76f);
             hint.Left.Set(22f, 0f);
             hint.Top.Set(270f, 0f);
@@ -106,20 +109,27 @@ namespace AdvancedWorldGen
             _memoryText.TextColor = new Color(255, 226, 150);
             panel.Append(_memoryText);
 
-            TextButton recommend = MakeButton("推荐尺寸", 20f, 342f, 150f);
+            _warningText = new UIText("", 0.76f);
+            _warningText.Left.Set(22f, 0f);
+            _warningText.Top.Set(340f, 0f);
+            _warningText.Width.Set(-44f, 1f);
+            _warningText.TextColor = new Color(255, 110, 110);
+            panel.Append(_warningText);
+
+            TextButton recommend = MakeButton("推荐尺寸", 20f, 370f, 150f);
             recommend.OnLeftClick += (evt, el) => RecommendSize();
             panel.Append(recommend);
 
             UIText recommendHint = new UIText("按当前内存选最大的可行尺寸", 0.75f);
             recommendHint.Left.Set(182f, 0f);
-            recommendHint.Top.Set(352f, 0f);
+            recommendHint.Top.Set(380f, 0f);
             recommendHint.TextColor = new Color(190, 205, 235);
             panel.Append(recommendHint);
 
             const int bw = 198;
             const int gap = 12;
-            float row1 = 388f;
-            float row2 = 438f;
+            float row1 = 416f;
+            float row2 = 466f;
 
             TextButton small = MakeButton("小 4200x1200", 20f, row1, bw);
             small.OnLeftClick += (evt, el) => ApplyPreset(4200, 1200);
@@ -145,19 +155,30 @@ namespace AdvancedWorldGen
             mega.OnLeftClick += (evt, el) => ApplyPreset(12000, 3600);
             panel.Append(mega);
 
+            TextButton tiny = MakeButton("微型 2200x900（实验）", 20f, 516f, 260f);
+            tiny.OnLeftClick += (evt, el) => ApplyPreset(2200, 900);
+            panel.Append(tiny);
+
+            TextButton micro = MakeButton("超微 1800x600（实验）", 294f, 516f, 260f);
+            micro.OnLeftClick += (evt, el) => ApplyPreset(1800, 600);
+            panel.Append(micro);
+
             _status = new UIText("", 0.75f);
             _status.Left.Set(22f, 0f);
-            _status.Top.Set(488f, 0f);
+            _status.Top.Set(564f, 0f);
             _status.Width.Set(-44f, 1f);
             _status.TextColor = new Color(200, 214, 240);
             panel.Append(_status);
 
-            TextButton back = MakeButton("返回", 20f, 516f, 150f);
+            TextButton back = MakeButton("返回", 20f, 592f, 150f);
             back.OnLeftClick += (evt, el) =>
             {
                 try
                 {
-                    Main.MenuUI.SetState(new SeedOptionsState(_previous));
+                    if (_returnToCreation && _previous != null)
+                        Main.MenuUI.SetState(_previous);
+                    else
+                        Main.MenuUI.SetState(new SeedOptionsState(_previous));
                 }
                 catch (Exception e)
                 {
@@ -189,12 +210,13 @@ namespace AdvancedWorldGen
             area.Append(text);
 
             box = new tContentPatch.Content.UI.UITextBox(value.ToString());
-            box.Text_MaxLength = 5;
+            TextBoxCompat.LeftAlign(box);
+            box.MaxInputLength = 5;
             box.Left.Set(200f, 0f);
             box.Top.Set(top, 0f);
             box.Width.Set(150f, 0f);
             box.Height.Set(34f, 0f);
-            box.SetText(value.ToString());
+            box.Text = value.ToString();
             area.Append(box);
 
             last = value.ToString();
@@ -227,14 +249,23 @@ namespace AdvancedWorldGen
                 AwgConfig cfg = AwgConfig.Instance;
                 bool laa = WorldGenHooks.IsLargeAddressAware();
 
-                int width = Math.Max(4200, Math.Min(12000, cfg.CustomWidth));
-                int height = Math.Max(1200, Math.Min(3600, cfg.CustomHeight));
+                int width = Math.Max(1800, Math.Min(12000, cfg.CustomWidth));
+                int height = Math.Max(600, Math.Min(3600, cfg.CustomHeight));
 
                 long budget = laa ? 3400 : 1500;
+                bool experimental = width < 2100 || height < 900;
 
+                _memoryText.TextColor = new Color(255, 226, 150);
                 _memoryText.SetText("当前内存 " + CurrentMb() + " MB · 预计 "
                     + EstimateMb(width, height) + " MB · 预算 " + budget + " MB（"
                     + (laa ? "LAA 已开启" : "LAA 未开启") + "）");
+
+                if (_warningText != null)
+                {
+                    _warningText.SetText(experimental
+                        ? "⚠ 低于 2100×900：实验性尺寸，地形会严重压缩，生成可能失败"
+                        : "");
+                }
             }
             catch
             {
@@ -291,13 +322,13 @@ namespace AdvancedWorldGen
         {
             base.Update(gameTime);
 
-            ApplyNumber(_widthBox, ref _lastWidth, 4200, 12000, v =>
+            ApplyNumber(_widthBox, ref _lastWidth, 1800, 12000, v =>
             {
                 AwgConfig.Instance.CustomWidth = v;
                 AwgConfig.Instance.CustomSize = true;
             });
 
-            ApplyNumber(_heightBox, ref _lastHeight, 1200, 3600, v =>
+            ApplyNumber(_heightBox, ref _lastHeight, 600, 3600, v =>
             {
                 AwgConfig.Instance.CustomHeight = v;
                 AwgConfig.Instance.CustomSize = true;
@@ -340,8 +371,8 @@ namespace AdvancedWorldGen
 
             try
             {
-                _widthBox?.SetText(width.ToString());
-                _heightBox?.SetText(height.ToString());
+                _widthBox.Text = width.ToString();
+                _heightBox.Text = height.ToString();
                 _lastWidth = width.ToString();
                 _lastHeight = height.ToString();
             }
@@ -350,6 +381,12 @@ namespace AdvancedWorldGen
             }
 
             RefreshMemoryText();
+
+            if (width < 2100 || height < 900)
+            {
+                _status?.SetText("⚠ " + width + "×" + height
+                    + " 低于 2100×900：实验性尺寸，地形会被严重压缩，生成可能失败。");
+            }
         }
     }
 }

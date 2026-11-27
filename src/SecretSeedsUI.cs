@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Terraria;
@@ -57,6 +57,7 @@ namespace AdvancedWorldGen
 
             const string g3 = "生物群系生成";
             Add("noSpiderCaves", "无蜘蛛窝", "arachnophobia", g3);
+            Add("manySpiderCaves", "爬虫横行", "creepy crawlies", g3);
             Add("hallowOnTheSurface", "地表神圣", "does that sparkle", g3);
             Add("noInfection", "无感染", "fish mox", g3);
             Add("worldIsInfected", "世界被感染", "purify this", g3);
@@ -110,6 +111,7 @@ namespace AdvancedWorldGen
                 { "surfaceIsInSpace", ItemID.Meteorite },
                 { "extraLiquid", ItemID.WaterBucket },
                 { "noSpiderCaves", ItemID.Cobweb },
+                { "manySpiderCaves", ItemID.SpiderFang },
                 { "hallowOnTheSurface", ItemID.HallowedSeeds },
                 { "noInfection", ItemID.PurificationPowder },
                 { "worldIsInfected", ItemID.EbonstoneBlock },
@@ -188,7 +190,7 @@ namespace AdvancedWorldGen
             title.Top.Set(12f, 0f);
             panel.Append(title);
 
-            _scroll = new UIScrollViewer2();
+            _scroll = new UIScrollViewer2(false);
             _scroll.Left.Set(20f, 0f);
             _scroll.Top.Set(54f, 0f);
             _scroll.Width.Set(-40f, 1f);
@@ -459,7 +461,8 @@ namespace AdvancedWorldGen
             CalculatedStyle d = GetDimensions();
             Rectangle rect = new Rectangle((int)d.X, (int)d.Y, (int)d.Width, (int)d.Height);
 
-            UiPaint.Fill(spriteBatch, rect, new Color(52, 66, 110, 170));
+            UiPaint.RowPanel(spriteBatch, rect, new Color(63, 82, 151));
+
             UiPaint.Text(spriteBatch, _title,
                 new Vector2(rect.X + 10f, rect.Y + 4f), new Color(255, 226, 150), 0.9f);
 
