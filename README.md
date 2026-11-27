@@ -1,6 +1,6 @@
 # 高级世界生成 — tPlainModLoader 移植
 
-把 tModLoader 的 **Advanced World Generation**（作者 Ishigh，MIT）核心功能移植到 **tPlainModLoader / Terraria 1.4.5.8**。
+把 tModLoader 的 **Advanced World Generation**（作者 Ishigh，MIT）核心功能移植到 **tPlainModLoader / Terraria 1.4.6.1**。
 
 原项目：https://github.com/Ishigh1/AdvancedWorldGen
 
@@ -19,7 +19,9 @@
 - 每项显示中文名 + 标准种子文本 + 悬停显示游戏内描述；
 - 每项前面有对应物品图标；
 - 开关直接调用 `SecretSeed.Enable/Disable` 并写入世界种子串，**无需先手动解锁**；
-- 支持「全部启用 / 全部关闭」。
+- 支持「全部启用 / 全部关闭」；
+- 「特殊种子组合 ▸」收录官方 Wiki 的 29 个组合，左键应用、再次左键取消；
+- 勾选 2 个及以上特殊种子时自动切换为「自定义世界大小」，选「常规世界」或清空后恢复原版小/中/大。
 
 ### 3. 扩展选项
 
@@ -42,8 +44,10 @@
 
 ### 5. 自定义世界大小（突破原版 8400×2400）
 
-- 面板里可直接**输入数字**或点预设（小 / 中 / 大 / 超大 / 极限 / 巨构）；
-- 最大支持 **12000 × 3600**（需要 32 位 LAA + 足够内存，预算不够会自动缩小）；
+- 世界创建界面的「小 / 中 / 大」后面新增原版样式的**「自定义」**按钮：左键选择、右键打开世界大小面板；
+- 面板里可直接**输入数字**或点预设（超微 / 微型 / 小 / 中 / 大 / 超大 / 极限 / 巨构）；
+- 最小支持 **1800 × 600**（低于 2100×900 会显示红色警告），最大支持 **12000 × 3600**（需要 32 位 LAA + 足够内存，预算不够会自动缩小）；
+- 宽高自动向上对齐到 **200 × 150** 的区块倍数；
 - **省内存生成**（新）：生成前先释放旧世界的方块数组、地图存档数据和渲染缓存，再做一次带大对象堆压缩的完整 GC；旧世界的 `Tile` 对象会**搬进新数组复用**（每格 24 字节，扩容时能省几百 MB）；
 - 「推荐尺寸」按钮会按当前进程内存 + LAA 状态，直接选出跑得动的最大预设；
 - 面板实时显示「当前内存 / 新世界预计内存 / 预算」；
@@ -61,17 +65,25 @@
 - 世界生成进度条下方显示：**已用时间 · 预计剩余时间 · 总进度百分比**；
 - 时间格式为「时/分/秒」，例如 `已用 0时12分34秒 · 预计剩余 0时03分21秒 (45.2%)`；
 - 进度来自原版 `WorldGenerator.CurrentGenerationProgress`，用指数平滑避免剩余时间乱跳；
-- 作为 `UIWorldLoad` 的子元素绘制，缩放和位置跟随原版进度条。
+- 作为 `UIWorldLoad` 的子元素绘制，缩放和位置跟随原版进度条；
+- 面板下方常驻「按 Esc 取消生成」提示，按 Esc 会中止生成并返回世界创建界面。
 
 ### 7. 32 位优化
 
 - 生成前按当前进程内存 + 新地图预估做预算检查，自动缩小尺寸（LAA 预算 3.4 GB，未开 LAA 1.5 GB）；
 - 生成前 / 生成后各做一次 GC + LOH 压缩，并记录内存；
-- 附带 `tools/enable-laa.ps1`：给 **Terraria.exe / tPlainModLoader.exe / tPlainModLoaderInjector.exe** 统一开启 **Large Address Aware**，32 位进程可用 ~4GB 而不是 ~2GB（自动备份为 `.bak`）。
+- 附带 `tools/enable-laa.ps1`：给 **Terraria.exe / tPlainModLoader.exe / tPlainModLoaderInjector.exe** 统一开启 **Large Address Aware**，32 位进程可用 ~4GB 而不是 ~2GB（自动备份为 `.bak`）；
+- 模组设置里也有 **「启用 LAA」开关**，可在游戏内直接打开 / 关闭（写入三个 exe，需重启游戏生效）。
 
 > **注意**：如果你是用 `tPlainModLoader.exe` 启动游戏，游戏实际运行在 `tPlainModLoader.exe` 进程里，
-> 所以**这个 exe 也必须开启 LAA**（脚本会自动处理），只给 Terraria.exe 开是不够的。
-> 脚本需要在**游戏完全关闭**时运行；Steam 校验或加载器更新后重跑一次即可。
+> 所以**这个 exe 也必须开启 LAA**（开关和脚本都会自动处理），只给 Terraria.exe 开是不够的。
+> 开关需要在**游戏完全关闭**时才会真正写入；Steam 校验或加载器更新后重新打开一次即可。
+
+### 8. 其他改进
+
+- **保存上一次设置**（可选）：关闭时每次生成结束都会把世界大小、种子选项等恢复默认，避免上次的尺寸带到下一次；
+- 世界创建界面里，非原版尺寸会直接显示为 **「宽×高」**，而不是「大世界」；
+- 设置面板、种子选项、组合、世界大小等界面统一使用原版面板贴图，风格与原版一致。
 
 ## 安装
 
@@ -88,7 +100,8 @@ ico.png
 
 - 世界创建界面 → 种子栏右侧齿轮 → 「种子选项」；
 - 「秘密种子 ▸」进入秘密种子列表；
-- 「世界大小 ▸」设置自定义尺寸；
+- 「特殊种子组合 ▸」一键应用 Wiki 上的组合种子；
+- 「世界大小 ▸」设置自定义尺寸（也可以在世界创建界面点「自定义」按钮，左键选择、右键进入面板）；
 - 「原版配置 ▸」修改原版世界生成参数；
 - 也可以在「模组设置 → 高级世界生成」里调整。
 
@@ -100,7 +113,7 @@ ico.png
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-需要 .NET SDK（自带 Roslyn）和游戏目录 `D:\steam\steamapps\common\Terraria`。
+需要 .NET SDK（自带 Roslyn）和游戏目录 `E:\SteamLibrary\steamapps\common\Terraria`（可在 `build.ps1` 里修改 `$gameDir`）。
 
 ## 目录
 
@@ -115,7 +128,11 @@ src/
   PostGen.cs            生成后处理：彩漆、海滩出生、随机替换
   WorldCreationUI.cs    世界创建界面面板（齿轮入口、种子输入、选项列表）
   SecretSeedsUI.cs      秘密种子页
+  SeedCombos.cs         Wiki 特殊种子组合数据
+  SeedCombosUI.cs       特殊种子组合页
   SizeUI.cs             世界大小页
+  GenEta.cs             生成进度 / 预计剩余时间 / Esc 取消
+  LaaToggle.cs          游戏内 LAA 开关（读写 PE 头）
   SettingPage.cs        游戏内模组设置页
   AwgConfig.cs          配置读写
   Log.cs
