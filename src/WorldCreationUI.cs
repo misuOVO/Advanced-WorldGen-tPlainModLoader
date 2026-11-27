@@ -391,14 +391,63 @@ namespace AdvancedWorldGen
     // 绘制工具
     // ------------------------------------------------------------------
 
+    /// <summary>
+    /// UI 贴图统一入口：启用/切换材质包时旧纹理会被释放，
+    /// 所以不能长期缓存 Texture2D，每次绘制都重新请求并检查 IsDisposed。
+    /// </summary>
+    internal static class UiTextures
+    {
+        private static Texture2D _white;
+        private static readonly HashSet<string> _warned = new HashSet<string>();
+
+        /// <summary>自带的 1x1 白点，不受材质包重载影响。</summary>
+        public static Texture2D White
+        {
+            get
+            {
+                if (_white == null || _white.IsDisposed)
+                {
+                    _white = new Texture2D(Main.instance.GraphicsDevice, 1, 1);
+                    _white.SetData(new[] { Color.White });
+                }
+
+                return _white;
+            }
+        }
+
+        /// <summary>立即加载指定路径的 UI 贴图；失败或已被释放时返回 null。</summary>
+        public static Texture2D FromAssets(string path)
+        {
+            try
+            {
+                ReLogic.Content.Asset<Texture2D> asset = Main.Assets.Request<Texture2D>(
+                    path, ReLogic.Content.AssetRequestMode.ImmediateLoad);
+
+                Texture2D tex = asset != null ? asset.Value : null;
+
+                if (tex != null && !tex.IsDisposed)
+                    return tex;
+            }
+            catch (Exception e)
+            {
+                if (_warned.Add(path))
+                    Log.Write("AWG: 加载 UI 贴图失败 " + path + ": " + e.Message);
+
+                return null;
+            }
+
+            if (_warned.Add(path))
+                Log.Write("AWG: UI 贴图不可用，已使用替代绘制: " + path);
+
+            return null;
+        }
+    }
+
     internal static class UiPaint
     {
-        private static Texture2D _panelBackground;
-        private static Texture2D _panelBorder;
-
         public static void Fill(SpriteBatch sb, Rectangle r, Color c)
         {
-            sb.Draw(TextureAssets.MagicPixel.Value, r, c);
+            sb.Draw(UiTextures.White, r, c);
         }
 
         /// <summary>
@@ -411,33 +460,19 @@ namespace AdvancedWorldGen
             if (r.Width <= 0 || r.Height <= 0)
                 return;
 
-            if (_panelBackground == null)
-            {
-                try
-                {
-                    _panelBackground = Main.Assets.Request<Texture2D>("Images/UI/PanelBackground").Value;
-                }
-                catch
-                {
-                }
-            }
+            // 材质包切换后旧纹理会被释放，必须每帧重新取
+            Texture2D bg = UiTextures.FromAssets("Images/UI/PanelBackground");
+            Texture2D bd = UiTextures.FromAssets("Images/UI/PanelBorder");
 
-            if (_panelBorder == null)
-            {
-                try
-                {
-                    _panelBorder = Main.Assets.Request<Texture2D>("Images/UI/PanelBorder").Value;
-                }
-                catch
-                {
-                }
-            }
+            if (bg != null)
+                NineSlice(sb, bg, r, background, corner, bar);
+            else
+                Fill(sb, r, background);
 
-            if (_panelBackground != null)
-                NineSlice(sb, _panelBackground, r, background, corner, bar);
-
-            if (_panelBorder != null)
-                NineSlice(sb, _panelBorder, r, border, corner, bar);
+            if (bd != null)
+                NineSlice(sb, bd, r, border, corner, bar);
+            else
+                Outline(sb, r, border, 2);
         }
 
         private static void NineSlice(SpriteBatch sb, Texture2D tex, Rectangle r, Color color,
@@ -491,13 +526,13 @@ namespace AdvancedWorldGen
 
             try
             {
-                tex = TextureAssets.SettingsPanel.Value;
+                tex = TextureAssets.SettingsPanel != null ? TextureAssets.SettingsPanel.Value : null;
             }
             catch
             {
             }
 
-            if (tex == null)
+            if (tex == null || tex.IsDisposed)
             {
                 Fill(sb, r, color);
                 return;
@@ -523,7 +558,7 @@ namespace AdvancedWorldGen
 
         public static void Outline(SpriteBatch sb, Rectangle r, Color c, int t = 1)
         {
-            Texture2D px = TextureAssets.MagicPixel.Value;
+            Texture2D px = UiTextures.White;
             sb.Draw(px, new Rectangle(r.X, r.Y, r.Width, t), c);
             sb.Draw(px, new Rectangle(r.X, r.Bottom - t, r.Width, t), c);
             sb.Draw(px, new Rectangle(r.X, r.Y, t, r.Height), c);
@@ -537,7 +572,7 @@ namespace AdvancedWorldGen
             if (len < 0.01f)
                 return;
 
-            sb.Draw(TextureAssets.MagicPixel.Value, a, null, c,
+            sb.Draw(UiTextures.White, a, null, c,
                 (float)Math.Atan2(d.Y, d.X), Vector2.Zero,
                 new Vector2(len, thickness), SpriteEffects.None, 0f);
         }
@@ -665,7 +700,7 @@ namespace AdvancedWorldGen
                 if (id < TextureAssets.Item.Length)
                 {
                     Texture2D tex = TextureAssets.Item[id].Value;
-                    if (tex != null)
+                    if (tex != null && !tex.IsDisposed)
                         return tex;
                 }
             }
@@ -679,7 +714,9 @@ namespace AdvancedWorldGen
                     "Images/Item_" + id,
                     ReLogic.Content.AssetRequestMode.ImmediateLoad);
 
-                return asset != null ? asset.Value : null;
+                Texture2D fallback = asset != null ? asset.Value : null;
+                if (fallback != null && !fallback.IsDisposed)
+                    return fallback;
             }
             catch
             {
@@ -719,7 +756,7 @@ namespace AdvancedWorldGen
                         BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
                     Texture2D tex = valueProp != null ? valueProp.GetValue(asset) as Texture2D : null;
-                    if (tex != null)
+                    if (tex != null && !tex.IsDisposed)
                         return tex;
                 }
                 catch
@@ -737,7 +774,11 @@ namespace AdvancedWorldGen
                         name, ReLogic.Content.AssetRequestMode.ImmediateLoad);
 
                     if (request != null)
-                        return request.Value;
+                    {
+                        Texture2D optionTex = request.Value;
+                        if (optionTex != null && !optionTex.IsDisposed)
+                            return optionTex;
+                    }
                 }
             }
             catch
@@ -800,7 +841,7 @@ namespace AdvancedWorldGen
         {
             get
             {
-                if (_icon == null)
+                if (_icon == null || _icon.IsDisposed)
                 {
                     Assembly asm = Assembly.GetExecutingAssembly();
                     using (Stream s = asm.GetManifestResourceStream("AdvancedWorldGen.Assets.ico.png"))
@@ -925,8 +966,6 @@ namespace AdvancedWorldGen
 
     internal class CustomSizeOptionButton : UIElement
     {
-        private static Texture2D _icon;
-
         public CustomSizeOptionButton(UIWorldCreation menu)
         {
             OnLeftClick += (evt, el) =>
@@ -955,19 +994,8 @@ namespace AdvancedWorldGen
         {
             get
             {
-                if (_icon == null)
-                {
-                    try
-                    {
-                        _icon = Main.Assets.Request<Texture2D>(
-                            "Images/UI/WorldCreation/IconSizeLarge").Value;
-                    }
-                    catch
-                    {
-                    }
-                }
-
-                return _icon;
+                // 材质包切换后旧纹理会被释放，每帧重新取
+                return UiTextures.FromAssets("Images/UI/WorldCreation/IconSizeLarge");
             }
         }
 
